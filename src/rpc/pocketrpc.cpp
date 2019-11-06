@@ -178,9 +178,7 @@ UniValue debug(const JSONRPCRequest& request)
 
 static const CRPCCommand commands[] =
 {
-    {"pocketnetrpc",   "getlastcomments2",    &getlastcomments,      {"count","address"}},
     {"pocketnetrpc",   "getlastcomments",     &getlastcomments,      {"count","address"}},
-    {"pocketnetrpc",   "getcomments2",        &getcomments,          {"postid","parentid","address","ids"}},
     {"pocketnetrpc",   "getcomments",         &getcomments,          {"postid","parentid","address","ids"}},
 
     {"hidden",         "debug",               &debug,                {} },

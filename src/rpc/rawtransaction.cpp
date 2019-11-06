@@ -2183,8 +2183,6 @@ UniValue getrawtransactionwithmessage(const JSONRPCRequest& request) {
 
     return a;
 }
-UniValue getrawtransactionwithmessage2(const JSONRPCRequest& request) { return getrawtransactionwithmessage(request); }
-
 
 UniValue getrawtransactionwithmessagebyid(const JSONRPCRequest& request)
 {
@@ -2230,7 +2228,6 @@ UniValue getrawtransactionwithmessagebyid(const JSONRPCRequest& request)
     }
     return a;
 }
-UniValue getrawtransactionwithmessagebyid2(const JSONRPCRequest& request) { return getrawtransactionwithmessagebyid(request); }
 
 UniValue gethotposts(const JSONRPCRequest& request)
 {
@@ -2308,7 +2305,6 @@ UniValue gethotposts(const JSONRPCRequest& request)
 
     return result;
 }
-UniValue gethotposts2(const JSONRPCRequest& request) { return gethotposts(request); }
 //----------------------------------------------------------
 std::map<std::string, UniValue> getUsersProfiles(std::vector<string> addresses, bool shortForm = true, int option = 0)
 {
@@ -2735,7 +2731,6 @@ UniValue getmissedinfo(const JSONRPCRequest& request)
 
     return a;
 }
-UniValue getmissedinfo2(const JSONRPCRequest& request) { return getmissedinfo(request); }
 
 UniValue txunspent(const JSONRPCRequest& request)
 {
@@ -3095,7 +3090,6 @@ UniValue getrecommendedposts(const JSONRPCRequest& request)
     jreq.params.push_back(a);
     return getrawtransactionwithmessagebyid(jreq);
 }
-UniValue getrecommendedposts2(const JSONRPCRequest& request) { return getrecommendedposts(request); }
 
 UniValue searchtags(const JSONRPCRequest& request)
 {
@@ -3336,7 +3330,6 @@ UniValue search(const JSONRPCRequest& request)
 
     return result;
 }
-UniValue search2(const JSONRPCRequest& request) { return search(request); }
 
 UniValue getuseraddress(const JSONRPCRequest& request)
 {
@@ -3596,23 +3589,17 @@ static const CRPCCommand commands[] =
     { "rawtransactions",    "converttopsbt",                        &converttopsbt,                     {"hexstring","permitsigdata","iswitness"} },
     { "rawtransactions",    "sendrawtransactionwithmessage",        &sendrawtransactionwithmessage,     {"hexstring", "message", "type"} },
     { "rawtransactions",    "getrawtransactionwithmessage",         &getrawtransactionwithmessage,      { "address_from", "address_to", "start_txid", "count" } },
-    { "rawtransactions",    "getrawtransactionwithmessage2",        &getrawtransactionwithmessage2,     { "address_from", "address_to", "start_txid", "count" } },
     { "rawtransactions",    "getrawtransactionwithmessagebyid",     &getrawtransactionwithmessagebyid,  { "txs","address" } },
-    { "rawtransactions",    "getrawtransactionwithmessagebyid2",    &getrawtransactionwithmessagebyid2, { "txs","address" } },
     { "rawtransactions",    "getuserprofile",                       &getuserprofile,                    { "addresses", "short" } },
     { "rawtransactions",    "getmissedinfo",                        &getmissedinfo,                     { "address", "blocknumber" } },
-    { "rawtransactions",    "getmissedinfo2",                       &getmissedinfo2,                    { "address", "blocknumber" } },
     { "rawtransactions",    "txunspent",                            &txunspent,                         { "addresses","minconf","maxconf","include_unsafe","query_options" } },
     { "rawtransactions",    "getaddressregistration",               &getaddressregistration,            { "addresses" } },
     { "rawtransactions",    "getuserstate",                         &getuserstate,                      { "address", "time" } },
     { "rawtransactions",    "gettime",                              &gettime,                           {} },
     { "rawtransactions",    "getrecommendedposts",                  &getrecommendedposts,               { "address", "count" } },
-    { "rawtransactions",    "getrecommendedposts2",                 &getrecommendedposts2,              { "address", "count" } },
     { "rawtransactions",    "searchtags",                           &searchtags,                        { "search_string", "count" } },
     { "rawtransactions",    "search",                               &search,                            { "search_string", "type", "count" } },
-    { "rawtransactions",    "search2",                              &search2,                           { "search_string", "type", "count" } },
     { "rawtransactions",    "gethotposts",                          &gethotposts,                       { "count", "depth" } },
-    { "rawtransactions",    "gethotposts2",                         &gethotposts2,                      { "count", "depth" } },
     { "rawtransactions",    "getuseraddress",                       &getuseraddress,                    { "name", "count" } },
 	{ "rawtransactions",    "getreputations",                       &getreputations,                    {} },
 	{ "rawtransactions",    "getcontents",                          &getcontents,                       { "address" } },
