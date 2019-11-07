@@ -332,7 +332,8 @@ bool AddrIndex::computeUsersRatings(CBlockIndex* pindex, std::map<std::string, i
 {
     for (auto& ur : userReputations) {
 
-        int rep = g_pocketdb->GetUserReputation(ur.first, pindex->nHeight - 1);
+        int rep = 0;
+        g_pocketdb->GetUserReputation(ur.first, pindex->nHeight - 1, rep);
         rep += ur.second;
 
         // Create new item with this height - new accumulating rating
@@ -544,21 +545,8 @@ bool AddrIndex::WriteRTransaction(std::string table, reindexer::Item& item, int 
     item["block"] = height;
 
     // Change User Profile
-    if (table == "Users") {
-        std::string _address = item["address"].As<string>();
-
-        reindexer::Item user_cur;
-        if (g_pocketdb->SelectOne(reindexer::Query("UsersView").Where("address", CondEq, _address), user_cur).ok()) {
-            item["id"] = user_cur["id"].As<int>();
-            item["regdate"] = user_cur["regdate"].As<int64_t>();
-            item["referrer"] = user_cur["referrer"].As<string>();
-        } else {
-            item["id"] = (int)g_pocketdb->SelectTotalCount("UsersView");
-            item["regdate"] = item["time"].As<int64_t>();
-        }
-
-        if (!g_pocketdb->UpsertWithCommit("Users", item).ok()) return false;
-        if (!g_pocketdb->UpdateUsersView(_address, height).ok()) return false;
+    if (table == "User") {
+        if (!g_pocketdb->CommitLastUserItem(item, height).ok()) return false;
     }
 
     // New Post
@@ -596,7 +584,7 @@ bool AddrIndex::WriteRTransaction(std::string table, reindexer::Item& item, int 
 
     // New Comment
     if (table == "Comment") {
-        if (!g_pocketdb->CommitLastItem("Comment", item, height).ok()) return false;
+        if (!g_pocketdb->CommitLastCommentItem(item, height).ok()) return false;
     }
 
     // Comment score
@@ -736,16 +724,15 @@ bool AddrIndex::RollbackDB(int blockHeight, bool back_to_mempool)
     // Cleaning Users with restore from UsersHistory
     {
         reindexer::QueryResults _users_res;
-        if (!g_pocketdb->DB()->Select(reindexer::Query("Users").Where("block", CondGt, blockHeight), _users_res).ok()) return false;
+        if (!g_pocketdb->DB()->Select(reindexer::Query("User").Where("block", CondGt, blockHeight), _users_res).ok()) return false;
         for (auto& it : _users_res) {
             reindexer::Item _user_itm = it.GetItem();
             std::string _user_txid = _user_itm["txid"].As<string>();
             std::string _user_address = _user_itm["address"].As<string>();
 
             // First remove current profile
-            if (back_to_mempool && !insert_to_mempool(_user_itm, "Users")) return false;
-            if (!g_pocketdb->DeleteWithCommit(reindexer::Query("Users").Where("txid", CondEq, _user_txid)).ok()) return false;
-            if (!g_pocketdb->UpdateUsersView(_user_address, blockHeight).ok()) return false;
+            if (back_to_mempool && !insert_to_mempool(_user_itm, "User")) return false;
+            if (!g_pocketdb->RestoreLastUserItem(_user_txid, _user_address, blockHeight).ok()) return false;
         }
     }
 
@@ -806,7 +793,7 @@ bool AddrIndex::RollbackDB(int blockHeight, bool back_to_mempool)
             std::string _comment_otxid = _delete_comment_itm["otxid"].As<string>();
 
             if (back_to_mempool && !insert_to_mempool(_delete_comment_itm, "Comment")) return false;
-            if (!g_pocketdb->RestoreLastItem("Comment", _comment_txid, _comment_otxid, blockHeight).ok()) return false;
+            if (!g_pocketdb->RestoreLastCommentItem(_comment_txid, _comment_otxid, blockHeight).ok()) return false;
         }
     }
 
@@ -891,15 +878,11 @@ bool AddrIndex::RollbackDB(int blockHeight, bool back_to_mempool)
 bool AddrIndex::GetAddressRegistrationDate(std::vector<std::string> addresses,
     std::vector<AddressRegistrationItem>& registrations)
 {
-    //db->AddIndex("Addresses", { "address", "hash", "string", IndexOpts().PK() });
-    //db->AddIndex("Addresses", { "txid", "", "string", IndexOpts() });
-    //db->AddIndex("Addresses", { "time", "tree", "int64", IndexOpts() });
-    //-------------------------
     reindexer::QueryResults queryRes;
     reindexer::Error err = g_pocketdb->DB()->Select(
         reindexer::Query("Addresses").Where("address", CondSet, addresses),
         queryRes);
-    //-------------------------
+
     if (err.ok()) {
         for (auto it : queryRes) {
             reindexer::Item itm(it.GetItem());
@@ -910,16 +893,12 @@ bool AddrIndex::GetAddressRegistrationDate(std::vector<std::string> addresses,
                     itm["time"].As<time_t>()));
         }
     }
-    //-------------------------
+    
     return true;
 }
 
 int64_t AddrIndex::GetAddressRegistrationDate(std::string _address)
 {
-    //db->AddIndex("Addresses", { "address", "hash", "string", IndexOpts().PK() });
-    //db->AddIndex("Addresses", { "txid", "", "string", IndexOpts() });
-    //db->AddIndex("Addresses", { "time", "tree", "int64", IndexOpts() });
-    //-------------------------
     reindexer::Item addrRes;
     reindexer::Error err = g_pocketdb->SelectOne(
         reindexer::Query("Addresses").Where("address", CondEq, _address),
@@ -942,7 +921,7 @@ bool AddrIndex::GetUnspentTransactions(std::vector<std::string> addresses,
             .Where("address", CondSet, addresses)
             .Where("spent_block", CondEq, 0),
         queryRes);
-    //-------------------------
+        
     if (err.ok()) {
         for (auto it : queryRes) {
             reindexer::Item itm(it.GetItem());
@@ -953,14 +932,14 @@ bool AddrIndex::GetUnspentTransactions(std::vector<std::string> addresses,
                     itm["txout"].As<int>()));
         }
     }
-    //-------------------------
+    
     return true;
 }
 
 int64_t AddrIndex::GetUserRegistrationDate(std::string _address)
 {
     reindexer::Item userItm;
-    reindexer::Error err = g_pocketdb->SelectOne(reindexer::Query("UsersView").Where("address", CondEq, _address), userItm);
+    reindexer::Error err = g_pocketdb->SelectOne(reindexer::Query("User").Where("address", CondEq, _address).Where("last", CondEq, true), userItm);
 
     if (err.ok()) {
         return userItm["regdate"].As<int64_t>();
@@ -1360,7 +1339,7 @@ bool AddrIndex::ComputeRHash(CBlockIndex* pindexPrev, std::string& hash)
         {
             std::string usersData = "";
             reindexer::QueryResults usersRes;
-            g_pocketdb->Select(reindexer::Query("Users").Where("block", CondEq, pindexPrev->nHeight).Sort("txid", false), usersRes);
+            g_pocketdb->Select(reindexer::Query("User").Where("block", CondEq, pindexPrev->nHeight).Sort("txid", false), usersRes);
             for (auto& u : usersRes) {
                 std::string _usersData = "";
                 reindexer::Item userItm(u.GetItem());
@@ -1680,7 +1659,7 @@ UniValue AddrIndex::GetUniValue(const CTransactionRef& tx, Item& item, std::stri
         oitm.pushKV("unblocking", item["unblocking"].As<bool>());
     }
     
-    if (table == "Users") {
+    if (table == "User") {
         oitm.pushKV("referrer", item["referrer"].As<string>());
         oitm.pushKV("name", item["name"].As<string>());
 

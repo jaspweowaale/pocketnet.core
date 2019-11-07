@@ -2800,7 +2800,7 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
             else if (optype != "share") {
                 if (optype == "userInfo") {
                     reindexer::Item _user_itm;
-                    if (g_pocketdb->SelectOne(reindexer::Query("UsersView").Where("txid", CondEq, txid), _user_itm).ok()) {
+                    if (g_pocketdb->SelectOne(reindexer::Query("User").Where("txid", CondEq, txid), _user_itm).ok()) {
                         if (_user_itm["time"].As<int64_t>() == _user_itm["regdate"].As<int64_t>()) {
                             if (_user_itm["referrer"].As<string>() != "") {
                             

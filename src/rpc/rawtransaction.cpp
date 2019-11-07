@@ -1835,7 +1835,7 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
         new_rtx.pTransaction["unsubscribe"] = true;
 
     } else if (mesType == "userInfo") {
-        new_rtx.pTable = "Users";
+        new_rtx.pTable = "User";
         new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
 
         new_rtx.pTransaction["txid"] = new_txid;
@@ -1848,20 +1848,20 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
 
         new_rtx.pTransaction["time"] = txTime;
         new_rtx.pTransaction["regdate"] = txTime;
-        reindexer::Item user_cur;
-        if (g_pocketdb->SelectOne(reindexer::Query("UsersView").Where("address", CondEq, address), user_cur).ok()) {
-            new_rtx.pTransaction["regdate"] = user_cur["regdate"].As<int64_t>();
-        }
+        // reindexer::Item user_cur;
+        // if (g_pocketdb->SelectOne(reindexer::Query("User").Where("address", CondEq, address), user_cur).ok()) {
+        //     new_rtx.pTransaction["regdate"] = user_cur["regdate"].As<int64_t>();
+        // }
 
         if (request.params[1].exists("a")) new_rtx.pTransaction["about"] = request.params[1]["a"].get_str();
         if (request.params[1].exists("s")) new_rtx.pTransaction["url"] = request.params[1]["s"].get_str();
         if (request.params[1].exists("b")) new_rtx.pTransaction["donations"] = request.params[1]["b"].get_str();
         if (request.params[1].exists("k")) new_rtx.pTransaction["pubkey"] = request.params[1]["k"].get_str();
 
-        new_rtx.pTransaction["referrer"] = "";
-        if (request.params[1].exists("r")) {
-            new_rtx.pTransaction["referrer"] = request.params[1]["r"].get_str();
-        }
+        // new_rtx.pTransaction["referrer"] = "";
+        // if (request.params[1].exists("r")) {
+        //     new_rtx.pTransaction["referrer"] = request.params[1]["r"].get_str();
+        // }
 
     } else if (mesType == "complainShare") {
         new_rtx.pTable = "Complains";
@@ -2130,7 +2130,7 @@ UniValue getrawtransactionwithmessage(const JSONRPCRequest& request) {
     if (address_to == "") {
         int64_t _bad_reputation_limit = GetActualLimit(Limit::bad_reputation, chainActive.Height());
         reindexer::QueryResults queryResBadReputation;
-        err = g_pocketdb->DB()->Select(reindexer::Query("UsersView").Where("reputation", CondLe, _bad_reputation_limit), queryResBadReputation);
+        err = g_pocketdb->DB()->Select(reindexer::Query("User").Where("last", CondEq, true).Where("reputation", CondLe, _bad_reputation_limit), queryResBadReputation);
 
         for (auto it : queryResBadReputation) {
             reindexer::Item itm(it.GetItem());
@@ -2273,7 +2273,7 @@ UniValue gethotposts(const JSONRPCRequest& request)
     // Do not show posts from users with reputation < Limit::bad_reputation
     int64_t _bad_reputation_limit = GetActualLimit(Limit::bad_reputation, chainActive.Height());
     reindexer::QueryResults queryResBadReputation;
-    g_pocketdb->DB()->Select(reindexer::Query("UsersView").Where("reputation", CondLe, _bad_reputation_limit), queryResBadReputation);
+    g_pocketdb->DB()->Select(reindexer::Query("User").Where("last", CondEq, true).Where("reputation", CondLe, _bad_reputation_limit), queryResBadReputation);
 
     for (auto it : queryResBadReputation) {
         reindexer::Item itm(it.GetItem());
@@ -2312,7 +2312,7 @@ std::map<std::string, UniValue> getUsersProfiles(std::vector<string> addresses, 
 
     // Get users
     reindexer::QueryResults _users_res;
-    g_pocketdb->DB()->Select(reindexer::Query("UsersView").Where("address", CondSet, addresses), _users_res);
+    g_pocketdb->DB()->Select(reindexer::Query("User").Where("last", CondEq, true).Where("address", CondSet, addresses), _users_res);
 
     // Get count of posts by addresses
     reindexer::AggregationResult aggRes;
@@ -2343,7 +2343,7 @@ std::map<std::string, UniValue> getUsersProfiles(std::vector<string> addresses, 
         }
 
         // Count of referrals
-        size_t _referrals_count = g_pocketdb->SelectCount(reindexer::Query("UsersView").Where("referrer", CondEq, _address));
+        size_t _referrals_count = g_pocketdb->SelectCount(reindexer::Query("User").Where("last", CondEq, true).Where("referrer", CondEq, _address));
         entry.pushKV("rc", (int)_referrals_count);
 
         if (option == 1)
@@ -3271,7 +3271,8 @@ UniValue search(const JSONRPCRequest& request)
     if (all || type == "users") {
         reindexer::QueryResults resUsersBySearchString;
         if (g_pocketdb->Select(
-                          reindexer::Query("UsersView", resultStart, resulCount)
+                          reindexer::Query("User", resultStart, resulCount)
+                              .Where("last", CondEq, true)
                               .Where("block", blockNumber ? CondLe : CondGe, blockNumber)
                               .Where("name_text", CondEq, "*" + UrlEncode(search_string) + "*")
                               .Sort("time", false)
@@ -3350,7 +3351,7 @@ UniValue getuseraddress(const JSONRPCRequest& request)
     }
 
     reindexer::QueryResults users;
-    g_pocketdb->Select(reindexer::Query("UsersView", 0, count).Where("name", CondEq, userName), users);
+    g_pocketdb->Select(reindexer::Query("User", 0, count).Where("last", CondEq, true).Where("name", CondEq, userName), users);
 
     UniValue aResult(UniValue::VARR);
     for (auto& u : users) {
@@ -3374,7 +3375,7 @@ UniValue getreputations(const JSONRPCRequest& request)
             "\nGet list repuatations of users.\n");
 
     reindexer::QueryResults users;
-    g_pocketdb->Select(reindexer::Query("UsersView"), users);
+    g_pocketdb->Select(reindexer::Query("User").Where("last", CondEq, true), users);
 
     UniValue aResult(UniValue::VARR);
     for (auto& u : users) {

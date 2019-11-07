@@ -63,8 +63,6 @@ public:
 
 	Error Update(std::string table, Item& item, bool commit = true);
 
-	// Get last item and write to UsersView
-	Error UpdateUsersView(std::string address, int height);
 	// Get last item and write to SubscribesView
 	Error UpdateSubscribesView(std::string address, std::string address_to);
 	// Get last item and write to BlockingView
@@ -77,7 +75,7 @@ public:
     // User
     bool SetUserReputation(std::string address, int rep);
     bool UpdateUserReputation(std::string address, int height);
-    int GetUserReputation(std::string _address, int height);
+    void GetUserReputation(std::string _address, int height, int& rep);
 
     // Post
     bool UpdatePostRating(std::string posttxid, int sum, int cnt, int& rep);
@@ -85,24 +83,25 @@ public:
     void GetPostRating(std::string posttxid, int& sum, int& cnt, int& rep, int height);
 
     // Comment
-    bool UpdateCommentRating(std::string commentid, int up, int down, int& rep);
+    bool UpdateCommentRating(std::string commentid, int up, int down, int rep);
     bool UpdateCommentRating(std::string commentid, int height);
     void GetCommentRating(std::string commentid, int& up, int& down, int& rep, int height);
 	
     // Returns sum of all unspent transactions for address
-	int64_t GetUserBalance(std::string _address, int height);
+	void GetUserBalance(std::string _address, int height, int64_t& balance);
 
     // Search tags in DB
     void SearchTags(std::string search, int count, std::map<std::string, int>& tags, int& totalCount);
 
     // Add new Post with move old version to history table
     Error CommitPostItem(Item& itm, int height);
-
-    // Restore previous version of Post
     Error RestorePostItem(std::string posttxid, int height);
 
-    Error CommitLastItem(std::string table, Item& itm, int height);
-    Error RestoreLastItem(std::string table, std::string txid, std::string otxid, int height);
+    Error CommitLastCommentItem(Item& itm, int height, bool disable_old = true);
+    Error RestoreLastCommentItem(std::string txid, std::string otxid, int height);
+
+    Error CommitLastUserItem(Item& itm, int height, bool disable_old = true);
+    Error RestoreLastUserItem(std::string txid, std::string address, int height);
 
 };
 //-----------------------------------------------------

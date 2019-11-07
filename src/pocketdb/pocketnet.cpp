@@ -75,7 +75,7 @@ bool ConvertOPToTableName(std::string op, std::string& ri_table)
     else if (op == OR_UNSUBSCRIBE)
         ri_table = "Subscribes";
     else if (op == OR_USERINFO)
-        ri_table = "Users";
+        ri_table = "User";
     else if (op == OR_BLOCKING)
         ri_table = "Blocking";
     else if (op == OR_UNBLOCKING)
