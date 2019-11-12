@@ -19,6 +19,7 @@
 #include <stdio.h>
 
 #include <memory>
+#include <chrono> 
 
 #include <boost/algorithm/string.hpp> // boost::trim
 
@@ -189,7 +190,13 @@ static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string &)
         if (valRequest.isObject()) {
             jreq.parse(valRequest);
 
+            // ------------------------------------------
+            auto start = std::chrono::high_resolution_clock::now();
             UniValue result = tableRPC.execute(jreq);
+            auto stop = std::chrono::high_resolution_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(stop - start); 
+            LogPrint(BCLog::RPC, "RPC Timing method(%s) time(%s) microseconds\n", jreq.strMethod, duration.count());
+            // ------------------------------------------
 
             // Send reply
             strReply = JSONRPCReply(result, NullUniValue, jreq.id);

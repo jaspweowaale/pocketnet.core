@@ -1730,25 +1730,14 @@ UniValue sendrawtransactionwithmessage(const JSONRPCRequest& request)
     int64_t txTime = new_rtx->nTime;
 
     if (mesType == "share") {
-        new_rtx.pTable = "Posts";
+        new_rtx.pTable = "Post";
         new_rtx.pTransaction = g_pocketdb->DB()->NewItem(new_rtx.pTable);
 
-        // Posts:
-        //   txid - txid of original post transaction
-        //   txidEdit - txid of post transaction
-        std::string _txid_edit = "";
-        if (request.params[1].exists("txidEdit")) _txid_edit = request.params[1]["txidEdit"].get_str();
-        if (_txid_edit != "") {
-            reindexer::Item _itmP;
-            reindexer::Error _err = g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, _txid_edit), _itmP);
+        std::string _otxid = new_txid;
+        if (request.params[1].exists("txidEdit")) _otxid = request.params[1]["txidEdit"].get_str();
+        new_rtx.pTransaction["txid"] = new_txid;
+        new_rtx.pTransaction["otxid"] = _otxid;
 
-            if (!_err.ok()) throw JSONRPCError(RPC_INVALID_PARAMS, "Invalid txidEdit. Post not found.");
-
-            txTime = _itmP["time"].As<int64_t>();
-        }
-
-        new_rtx.pTransaction["txid"] = _txid_edit == "" ? new_txid : _txid_edit;
-        new_rtx.pTransaction["txidEdit"] = _txid_edit == "" ? "" : new_txid;
         new_rtx.pTransaction["block"] = -1;
         new_rtx.pTransaction["address"] = address;
         new_rtx.pTransaction["time"] = txTime;
@@ -1981,8 +1970,8 @@ UniValue getPostData(reindexer::Item& itm, std::string address)
 {
     UniValue entry(UniValue::VOBJ);
 
-    entry.pushKV("txid", itm["txid"].As<string>());
-    if (itm["txidEdit"].As<string>() != "") entry.pushKV("edit", "true");
+    entry.pushKV("txid", itm["otxid"].As<string>());
+    if (itm["txid"].As<string>() != itm["otxid"].As<string>()) entry.pushKV("edit", "true");
     entry.pushKV("address", itm["address"].As<string>());
     entry.pushKV("time", itm["time"].As<string>());
     entry.pushKV("l", itm["lang"].As<string>());
@@ -2020,19 +2009,19 @@ UniValue getPostData(reindexer::Item& itm, std::string address)
     if (address != "") {
         reindexer::Item scoreMyItm;
         reindexer::Error errS = g_pocketdb->SelectOne(
-            reindexer::Query("Scores").Where("address", CondEq, address).Where("posttxid", CondEq, itm["txid"].As<string>()),
+            reindexer::Query("Scores").Where("address", CondEq, address).Where("posttxid", CondEq, itm["otxid"].As<string>()),
             scoreMyItm);
 
         entry.pushKV("myVal", errS.ok() ? scoreMyItm["value"].As<string>() : "0");
     }
 
-    int totalComments = g_pocketdb->SelectCount(Query("Comment").Where("postid", CondEq, itm["txid"].As<string>()).Where("last", CondEq, true));
+    int totalComments = g_pocketdb->SelectCount(Query("Comment").Where("postid", CondEq, itm["otxid"].As<string>()).Where("last", CondEq, true));
     entry.pushKV("comments", totalComments);
 
     reindexer::QueryResults cmntRes;
     g_pocketdb->Select(
         Query("Comment", 0, 1)
-            .Where("postid", CondEq, itm["txid"].As<string>())
+            .Where("postid", CondEq, itm["otxid"].As<string>())
             .Where("parentid", CondEq, "")
             .Where("last", CondEq, true)
             .Sort("time", true)
@@ -2106,7 +2095,7 @@ UniValue getrawtransactionwithmessage(const JSONRPCRequest& request) {
     if (request.params.size() > 2) {
         reindexer::Item postItm;
         reindexer::Error errT = g_pocketdb->SelectOne(
-            reindexer::Query("Posts").Where("txid", CondEq, request.params[2].get_str()),
+            reindexer::Query("Post").Where("otxid", CondEq, request.params[2].get_str()).Where("last", CondEq, true),
             postItm);
         if (errT.ok()) resultStart = postItm["time"].As<int64_t>();
     }
@@ -2155,11 +2144,11 @@ UniValue getrawtransactionwithmessage(const JSONRPCRequest& request) {
         }
 
         err = g_pocketdb->DB()->Select(
-            reindexer::Query("Posts" /*, 0, resultCount*/).Where("address", CondSet, addrs).Not().Where("address", CondSet, addrsblock).Where("time", ((resultCount > 0 && resultStart > 0) ? CondLt : CondGt), resultStart).Where("time", CondLe, GetAdjustedTime()).Sort("time", (resultCount > 0 ? true : false)),
+            reindexer::Query("Post").Where("address", CondSet, addrs).Not().Where("address", CondSet, addrsblock).Where("time", ((resultCount > 0 && resultStart > 0) ? CondLt : CondGt), resultStart).Where("time", CondLe, GetAdjustedTime()).Where("last", CondEq, true).Sort("time", (resultCount > 0 ? true : false)),
             queryRes);
     } else {
         err = g_pocketdb->DB()->Select(
-            reindexer::Query("Posts" /*, 0, resultCount*/).Not().Where("address", CondSet, addrsblock).Where("time", ((resultCount > 0 && resultStart > 0) ? CondLt : CondGt), resultStart).Where("time", CondLe, GetAdjustedTime()).Sort("time", (resultCount > 0 ? true : false)),
+            reindexer::Query("Post").Not().Where("address", CondSet, addrsblock).Where("time", ((resultCount > 0 && resultStart > 0) ? CondLt : CondGt), resultStart).Where("time", CondLe, GetAdjustedTime()).Where("last", CondEq, true).Sort("time", (resultCount > 0 ? true : false)),
             queryRes);
     }
 
@@ -2169,9 +2158,9 @@ UniValue getrawtransactionwithmessage(const JSONRPCRequest& request) {
         reindexer::Item itm(it.GetItem());
 
         reindexer::QueryResults queryResComp;
-        err = g_pocketdb->DB()->Select(reindexer::Query("Complains").Where("posttxid", CondEq, itm["txid"].As<string>()), queryResComp);
+        err = g_pocketdb->DB()->Select(reindexer::Query("Complains").Where("posttxid", CondEq, itm["otxid"].As<string>()), queryResComp);
         reindexer::QueryResults queryResUpv;
-        err = g_pocketdb->DB()->Select(reindexer::Query("Scores").Where("posttxid", CondEq, itm["txid"].As<string>()).Where("value", CondGt, 3), queryResUpv);
+        err = g_pocketdb->DB()->Select(reindexer::Query("Scores").Where("posttxid", CondEq, itm["otxid"].As<string>()).Where("value", CondGt, 3), queryResUpv);
 
         if (queryResComp.Count() <= 7 || queryResComp.Count() / (queryResUpv.Count() == 0 ? 1 : queryResUpv.Count() == 0 ? 1 : queryResUpv.Count()) <= 0.1) {
             a.push_back(getPostData(itm, address_from));
@@ -2219,7 +2208,7 @@ UniValue getrawtransactionwithmessagebyid(const JSONRPCRequest& request)
     reindexer::Error err;
 
     err = g_pocketdb->DB()->Select(
-        reindexer::Query("Posts").Where("txid", CondSet, TxIds).Sort("time", true),
+        reindexer::Query("Post").Where("otxid", CondSet, TxIds).Where("last", CondEq, true).Sort("time", true),
         queryRes);
 
     for (auto it : queryRes) {
@@ -2283,10 +2272,10 @@ UniValue gethotposts(const JSONRPCRequest& request)
     // best posts of last month
     // 60s * 60m * 24h * 30d = 2592000
     reindexer::QueryResults postsRes;
-    g_pocketdb->Select(reindexer::Query("Posts", 0, count * 5)
+    g_pocketdb->Select(reindexer::Query("Post", 0, count * 5)
                            .Where("time", CondGt, curTime - depth)
-                           .Not()
-                           .Where("address", CondSet, addrsblock)
+                           .Not().Where("address", CondSet, addrsblock)
+                           .Where("last", CondEq, true)
                            .Sort("reputation", true)
                            .Sort("scoreSum", true),
         postsRes);
@@ -2317,7 +2306,7 @@ std::map<std::string, UniValue> getUsersProfiles(std::vector<string> addresses, 
     // Get count of posts by addresses
     reindexer::AggregationResult aggRes;
     std::map<std::string, int> _posts_cnt;
-    if (g_pocketdb->SelectAggr(reindexer::Query("Posts").Where("address", CondSet, addresses).Aggregate("address", AggFacet), "address", aggRes).ok()) {
+    if (g_pocketdb->SelectAggr(reindexer::Query("Post").Where("address", CondSet, addresses).Where("last", CondEq, true).Aggregate("address", AggFacet), "address", aggRes).ok()) {
         for (const auto& f : aggRes.facets) {
             _posts_cnt.insert_or_assign(f.value, f.count);
         }
@@ -2504,45 +2493,21 @@ UniValue getmissedinfo(const JSONRPCRequest& request)
     UniValue a(UniValue::VARR);
 
     reindexer::QueryResults posts;
-    g_pocketdb->DB()->Select(reindexer::Query("Posts").Where("block", CondGt, blockNumber), posts);
+    g_pocketdb->DB()->Select(reindexer::Query("Post").Where("block", CondGt, blockNumber).Where("last", CondEq, true), posts);
 
     UniValue msg(UniValue::VOBJ);
     msg.pushKV("block", (int)chainActive.Height());
     msg.pushKV("cntposts", (int)posts.Count());
     a.push_back(msg);
 
-    /*std::string txidpocketnet = "";
-    std::string addrespocketnet = "PEj7QNjKdDPqE9kMDRboKoCtp8V6vZeZPd";
-
-    reindexer::QueryResults postspocketnet;
-    g_pocketdb->DB()->Select(reindexer::Query("Posts").Where("block", CondGt, blockNumber).Where("address", CondEq, addrespocketnet).Where("txidEdit", CondEq, ""), postspocketnet);
-    for (auto it : postspocketnet) {
-        reindexer::Item itm(it.GetItem());
-        if (txidpocketnet.find(itm["txid"].As<string>()) == std::string::npos)
-            txidpocketnet = txidpocketnet + itm["txid"].As<string>() + ",";
-    }
-    reindexer::QueryResults postshistpocketnet;
-    g_pocketdb->DB()->Select(reindexer::Query("PostsHistory").Where("block", CondGt, blockNumber).Where("address", CondEq, addrespocketnet).Where("txidEdit", CondEq, ""), postshistpocketnet);
-    for (auto it : postshistpocketnet) {
-        reindexer::Item itm(it.GetItem());
-        if (txidpocketnet.find(itm["txid"].As<string>()) == std::string::npos)
-            txidpocketnet = txidpocketnet + itm["txid"].As<string>() + ",";
-    }
-    if (txidpocketnet != "") {
-        UniValue msg(UniValue::VOBJ);
-        msg.pushKV("msg", "sharepocketnet");
-        msg.pushKV("txids", txidpocketnet.substr(0, txidpocketnet.size() - 1));
-        a.push_back(msg);
-    }*/
-
     std::string addrespocketnet = "PEj7QNjKdDPqE9kMDRboKoCtp8V6vZeZPd";
     reindexer::QueryResults postspocketnet;
-    g_pocketdb->DB()->Select(reindexer::Query("Posts").Where("block", CondGt, blockNumber).Where("address", CondEq, addrespocketnet), postspocketnet);
+    g_pocketdb->DB()->Select(reindexer::Query("Post").Where("block", CondGt, blockNumber).Where("address", CondEq, addrespocketnet).Where("last", CondEq, true), postspocketnet);
     for (auto it : postspocketnet) {
         reindexer::Item itm(it.GetItem());
         UniValue msg(UniValue::VOBJ);
         msg.pushKV("msg", "sharepocketnet");
-        msg.pushKV("txid", itm["txid"].As<string>());
+        msg.pushKV("txid", itm["otxid"].As<string>());
         msg.pushKV("time", itm["time"].As<string>());
         msg.pushKV("nblock", itm["block"].As<int>());
         a.push_back(msg);
@@ -2564,8 +2529,9 @@ UniValue getmissedinfo(const JSONRPCRequest& request)
         a.push_back(msg);
     }
 
+    // Join with original Post by txid
     reindexer::QueryResults scores;
-    g_pocketdb->DB()->Select(reindexer::Query("Scores").Where("block", CondGt, blockNumber).InnerJoin("posttxid", "txid", CondEq, reindexer::Query("Posts").Where("address", CondEq, address)).Sort("time", true).Limit(cntResult), scores);
+    g_pocketdb->DB()->Select(reindexer::Query("Scores").Where("block", CondGt, blockNumber).InnerJoin("posttxid", "txid", CondEq, reindexer::Query("Post").Where("address", CondEq, address)).Sort("time", true).Limit(cntResult), scores);
     for (auto it : scores) {
         reindexer::Item itm(it.GetItem());
         UniValue msg(UniValue::VOBJ);
@@ -2585,6 +2551,7 @@ UniValue getmissedinfo(const JSONRPCRequest& request)
     g_pocketdb->DB()->Select(
         reindexer::Query("CommentScores")
             .Where("block", CondGt, blockNumber)
+            // Join with original Comment by txid
             .InnerJoin("commentid", "txid", CondEq, reindexer::Query("Comment").Where("address", CondEq, address))
             .Sort("time", true)
             .Limit(cntResult)
@@ -2672,7 +2639,7 @@ UniValue getmissedinfo(const JSONRPCRequest& request)
         reindexer::Query("Comment")
             .Where("block", CondGt, blockNumber)
             .Where("last", CondEq, true)
-            .InnerJoin("answerid", "otxid", CondEq, reindexer::Query("Comment").Where("address", CondEq, address).Where("last", CondEq, true))
+            .InnerJoin("answerid", "txid", CondEq, reindexer::Query("Comment").Where("address", CondEq, address))
             .Sort("time", true)
             .Limit(cntResult)
     ,commentsAnswer);
@@ -2703,8 +2670,13 @@ UniValue getmissedinfo(const JSONRPCRequest& request)
     }
 
     reindexer::QueryResults commentsPost;
-    g_pocketdb->DB()->Select(reindexer::Query("Comment").Where("block", CondGt, blockNumber).Where("last", CondEq, true)
-        .InnerJoin("postid", "txid", CondEq, reindexer::Query("Posts").Where("address", CondEq, address).Not().Where("txid", CondSet, answerpostids)).Sort("time", true).Limit(cntResult), commentsPost);
+    g_pocketdb->DB()->Select(
+        reindexer::Query("Comment")
+            .Where("block", CondGt, blockNumber)
+            .Where("last", CondEq, true)
+            .InnerJoin("postid", "txid", CondEq, reindexer::Query("Post").Where("address", CondEq, address).Not().Where("txid", CondSet, answerpostids))
+            .Sort("time", true).Limit(cntResult)
+    ,commentsPost);
 
     for (auto it : commentsPost) {
         reindexer::Item itm(it.GetItem());
@@ -3236,10 +3208,11 @@ UniValue search(const JSONRPCRequest& request)
         //LogPrintf("--- Search: %s\n", fulltext_search_string);
         reindexer::QueryResults resPostsBySearchString;
         if (g_pocketdb->Select(
-                          reindexer::Query("Posts", resultStart, resulCount)
+                          reindexer::Query("Post", resultStart, resulCount)
                               .Where("block", blockNumber ? CondLe : CondGe, blockNumber)
                               .Where(search_string.at(0) == '#' ? "tags" : "caption+message", CondEq, search_string.at(0) == '#' ? search_string.substr(1) : "\"" + search_string + "\"")
                               .Where("address", address == "" ? CondGt : CondEq, address)
+                              .Where("last", CondEq, true)
                               .Sort("time", true)
                               .ReqTotal(),
                           resPostsBySearchString)
@@ -3419,7 +3392,7 @@ UniValue getcontents(const JSONRPCRequest& request)
     }
 
     reindexer::QueryResults posts;
-    g_pocketdb->Select(reindexer::Query("Posts").Where("address", CondEq, address), posts);
+    g_pocketdb->Select(reindexer::Query("Post").Where("address", CondEq, address).Where("last", CondEq, true), posts);
 
     UniValue aResult(UniValue::VARR);
     for (auto& p : posts) {
@@ -3465,7 +3438,7 @@ UniValue gettags(const JSONRPCRequest& request)
 
     std::map<std::string, int> mapTags;
     reindexer::QueryResults posts;
-    g_pocketdb->Select(reindexer::Query("Posts").Where("block", CondGe, from).Where("address", address == "" ? CondGt : CondEq, address), posts);
+    g_pocketdb->Select(reindexer::Query("Post").Where("block", CondGe, from).Where("address", address == "" ? CondGt : CondEq, address).Where("last", CondEq, true), posts);
     for (auto& p : posts) {
         reindexer::Item postItm = p.GetItem();
 

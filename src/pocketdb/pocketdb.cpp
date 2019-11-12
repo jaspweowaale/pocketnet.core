@@ -28,8 +28,7 @@ void PocketDB::CloseNamespaces() {
     db->CloseNamespace("Mempool");
     db->CloseNamespace("User");
     db->CloseNamespace("Tags");
-    db->CloseNamespace("Posts");
-    db->CloseNamespace("PostsHistory");
+    db->CloseNamespace("Post");
     db->CloseNamespace("Scores");
     db->CloseNamespace("Complains");
     db->CloseNamespace("UserRatings");
@@ -171,52 +170,28 @@ bool PocketDB::InitDB(std::string table)
     }
 
     // Posts
-    if (table == "Posts" || table == "ALL") {
-        db->OpenNamespace("Posts", StorageOpts().Enabled().CreateIfMissing());
-        db->AddIndex("Posts", {"txid", "hash", "string", IndexOpts().PK()});
-        db->AddIndex("Posts", {"txidEdit", "hash", "string", IndexOpts()});
-        db->AddIndex("Posts", {"block", "tree", "int", IndexOpts()});
-        db->AddIndex("Posts", {"time", "tree", "int64", IndexOpts()});
-        db->AddIndex("Posts", {"address", "hash", "string", IndexOpts()});
-        // Types:
-        // 0 - simple post
-        // 1 - video post
-        // 2 - image post
-        db->AddIndex("Posts", {"type", "tree", "int", IndexOpts()});
-        db->AddIndex("Posts", {"lang", "-", "string", IndexOpts()});
-        db->AddIndex("Posts", {"caption", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->AddIndex("Posts", {"caption_", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->AddIndex("Posts", {"message", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->AddIndex("Posts", {"message_", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->AddIndex("Posts", {"tags", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
-        db->AddIndex("Posts", {"url", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->AddIndex("Posts", {"images", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
-        db->AddIndex("Posts", {"settings", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->AddIndex("Posts", {"scoreSum", "-", "int", IndexOpts()});
-        db->AddIndex("Posts", {"scoreCnt", "-", "int", IndexOpts()});
-        db->AddIndex("Posts", {"reputation", "-", "int", IndexOpts()});
-        db->AddIndex("Posts", {"caption+message", {"caption_", "message_"}, "text", "composite", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->Commit("Posts");
-    }
-
-    // Posts Hitstory
-    if (table == "PostsHistory" || table == "ALL") {
-        db->OpenNamespace("PostsHistory", StorageOpts().Enabled().CreateIfMissing());
-        db->AddIndex("PostsHistory", {"txid", "hash", "string", IndexOpts()});
-        db->AddIndex("PostsHistory", {"txidEdit", "hash", "string", IndexOpts()});
-        db->AddIndex("PostsHistory", {"block", "tree", "int", IndexOpts()});
-        db->AddIndex("PostsHistory", {"time", "tree", "int64", IndexOpts()});
-        db->AddIndex("PostsHistory", {"address", "hash", "string", IndexOpts()});
-        db->AddIndex("PostsHistory", {"type", "-", "int", IndexOpts()});
-        db->AddIndex("PostsHistory", {"lang", "-", "string", IndexOpts()});
-        db->AddIndex("PostsHistory", {"caption", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->AddIndex("PostsHistory", {"message", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->AddIndex("PostsHistory", {"tags", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
-        db->AddIndex("PostsHistory", {"url", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->AddIndex("PostsHistory", {"images", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
-        db->AddIndex("PostsHistory", {"settings", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
-        db->AddIndex("PostsHistory", {"txid+block", {"txid", "block"}, "hash", "composite", IndexOpts().PK()});
-        db->Commit("PostsHistory");
+    if (table == "Post" || table == "ALL") {
+        db->OpenNamespace("Post", StorageOpts().Enabled().CreateIfMissing());
+        db->AddIndex("Post", {"txid", "hash", "string", IndexOpts().PK()});
+        db->AddIndex("Post", {"otxid", "hash", "string", IndexOpts()});
+        db->AddIndex("Post", {"block", "tree", "int", IndexOpts()});
+        db->AddIndex("Post", {"time", "tree", "int64", IndexOpts()});
+        db->AddIndex("Post", {"address", "hash", "string", IndexOpts()});
+        db->AddIndex("Post", {"type", "tree", "int", IndexOpts()});
+        db->AddIndex("Post", {"lang", "-", "string", IndexOpts()});
+        db->AddIndex("Post", {"caption", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->AddIndex("Post", {"caption_", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->AddIndex("Post", {"message", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->AddIndex("Post", {"message_", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->AddIndex("Post", {"tags", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
+        db->AddIndex("Post", {"url", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->AddIndex("Post", {"images", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
+        db->AddIndex("Post", {"settings", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->AddIndex("Post", {"scoreSum", "-", "int", IndexOpts()});
+        db->AddIndex("Post", {"scoreCnt", "-", "int", IndexOpts()});
+        db->AddIndex("Post", {"reputation", "-", "int", IndexOpts()});
+        db->AddIndex("Post", {"caption+message", {"caption_", "message_"}, "text", "composite", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->Commit("Post");
     }
 
     // PostRatings
@@ -779,13 +754,13 @@ void PocketDB::GetPostRating(std::string posttxid, int& sum, int& cnt, int& rep,
 bool PocketDB::UpdatePostRating(std::string posttxid, int sum, int cnt, int& rep)
 {
     reindexer::QueryResults postsRes;
-    if (!db->Select(reindexer::Query("Posts", 0, 1).Where("txid", CondEq, posttxid), postsRes).ok()) return false;
+    if (!db->Select(reindexer::Query("Post", 0, 1).Where("otxid", CondEq, posttxid).Where("last", CondEq, true), postsRes).ok()) return false;
     for (auto& p : postsRes) {
         reindexer::Item postItm(p.GetItem());
         postItm["scoreSum"] = sum;
         postItm["scoreCnt"] = cnt;
         postItm["reputation"] = rep;
-        if (!UpsertWithCommit("Posts", postItm).ok()) return false;
+        if (!UpsertWithCommit("Post", postItm).ok()) return false;
     }
 
     return true;
@@ -801,105 +776,69 @@ bool PocketDB::UpdatePostRating(std::string posttxid, int height)
     return UpdatePostRating(posttxid, sum, cnt, rep);
 }
 
-
-Error PocketDB::CommitPostItem(Item& itm, int height) {
+Error PocketDB::CommitLastPostItem(Item& itm, int height, bool disable_old) {
     Error err;
-    
-    // Move exists Post to history table
-    if (itm["txidEdit"].As<string>() != "") {
-        Item cur_post_item;
-        if (SelectOne(Query("Posts").Where("txid", CondEq, itm["txid"].As<string>()), cur_post_item).ok()) {
-            Item hist_post_item = db->NewItem("PostsHistory");
-            hist_post_item["txid"] = cur_post_item["txid"].As<string>();
-            hist_post_item["txidEdit"] = cur_post_item["txidEdit"].As<string>();
-            hist_post_item["block"] = cur_post_item["block"].As<int>();
-            hist_post_item["time"] = cur_post_item["time"].As<int64_t>();
-            hist_post_item["address"] = cur_post_item["address"].As<string>();
-            hist_post_item["type"] = cur_post_item["type"].As<int>();
-            hist_post_item["lang"] = cur_post_item["lang"].As<string>();
-            hist_post_item["caption"] = cur_post_item["caption"].As<string>();
-            hist_post_item["message"] = cur_post_item["message"].As<string>();
-            hist_post_item["tags"] = cur_post_item["tags"];
-            hist_post_item["url"] = cur_post_item["url"].As<string>();
-            hist_post_item["images"] = cur_post_item["images"];
-            hist_post_item["settings"] = cur_post_item["settings"].As<string>();
-            
-            err = UpsertWithCommit("PostsHistory", hist_post_item);
-            if (!err.ok()) return err;
 
-            err = DeleteWithCommit(Query("Posts").Where("txid", CondEq, itm["txid"].As<string>()));
+    // Disable all founded last items
+    if (disable_old) {
+        QueryResults all_res;
+        err = db->Select(Query("Post").Where("otxid", CondEq, itm["otxid"].As<string>()).Where("last", CondEq, true), all_res);
+        if (!err.ok()) return err;
+        for (auto& it : all_res) {
+            Item _itm = it.GetItem();
+            _itm["last"] = false;
+            _itm["scoreSum"] = 0;
+            _itm["scoreCnt"] = 0;
+            _itm["reputation"] = 0;
+            _itm["caption_"] = "";
+            _itm["message_"] = "";
+            err = UpsertWithCommit("Post", _itm);
             if (!err.ok()) return err;
         }
-
-        // Restore rating for Edit Post
-        int sum = 0;
-        int cnt = 0;
-        int rep = 0;
-        GetPostRating(itm["txid"].As<string>(), sum, cnt, rep, height);
-        itm["scoreSum"] = sum;
-        itm["scoreCnt"] = cnt;
-        itm["reputation"] = rep;
     }
 
-    // Insert new Post
-    err = UpsertWithCommit("Posts", itm);
+    // Restore rating
+    int sum = 0;
+    int cnt = 0;
+    int rep = 0;
+    GetPostRating(itm["otxid"].As<string>(), sum, cnt, rep, height);
+    itm["scoreSum"] = sum;
+    itm["scoreCnt"] = cnt;
+    itm["reputation"] = rep;
+
+    // Clear data for searching
+    std::string caption_decoded = UrlDecode(itm["caption"].As<string>());
+    std::string message_decoded = UrlDecode(itm["message"].As<string>());
+    itm["caption_"] = ClearHtmlTags(caption_decoded);
+    itm["message_"] = ClearHtmlTags(message_decoded);
+
+    // Insert new item
+    itm["last"] = true;
+    err = UpsertWithCommit("Post", itm);
     return err;
 }
 
-Error PocketDB::RestorePostItem(std::string posttxid, int height) {
-    // Move exists Post to history table
-    Item hist_post_item;
-    Error err = SelectOne(Query("PostsHistory").Where("txid", CondEq, posttxid).Sort("block", true), hist_post_item);
+Error PocketDB::RestoreLastPostItem(std::string txid, std::string otxid, int height) {
+
+    // delete last by txid
+    Error err = DeleteWithCommit(Query("Post").Where("txid", CondEq, txid));
+    if (!err.ok()) return err;
+
+    // select last
+    QueryResults last_res;
+    err = db->Select(Query("Post", 0, 1).Where("otxid", CondEq, otxid).Sort("block", true), last_res);
     if (err.ok()) {
-        std::string posttxid_edit = hist_post_item["txidEdit"].As<string>();
+        if (last_res.Count() > 0) {
+            Item last_item = last_res[0].GetItem();
+            return CommitLastPostItem(last_item, height, false);
 
-        Item post_item = db->NewItem("Posts");
-        post_item["txid"] = hist_post_item["txid"].As<string>();
-        post_item["txidEdit"] = posttxid_edit;
-        post_item["block"] = hist_post_item["block"].As<int>();
-        post_item["time"] = hist_post_item["time"].As<int64_t>();
-        post_item["address"] = hist_post_item["address"].As<string>();
-        post_item["type"] = hist_post_item["type"].As<int>();
-        post_item["lang"] = hist_post_item["lang"].As<string>();
-        post_item["caption"] = hist_post_item["caption"].As<string>();
-        post_item["message"] = hist_post_item["message"].As<string>();
-        post_item["tags"] = hist_post_item["tags"];
-        post_item["url"] = hist_post_item["url"].As<string>();
-        post_item["images"] = hist_post_item["images"];
-        post_item["settings"] = hist_post_item["settings"].As<string>();
-
-        std::string caption_decoded = UrlDecode(post_item["caption"].As<string>());
-        post_item["caption_"] = ClearHtmlTags(caption_decoded);
-
-        std::string message_decoded = UrlDecode(post_item["message"].As<string>());
-        post_item["message_"] = ClearHtmlTags(message_decoded);
-
-        // Restore rating for Post
-        int sum = 0;
-        int cnt = 0;
-        int rep = 0;
-        GetPostRating(posttxid, sum, cnt, rep, height);
-        post_item["scoreSum"] = sum;
-        post_item["scoreCnt"] = cnt;
-        post_item["reputation"] = rep;
-
-        // Before restore need delete current item
-        err = DeleteWithCommit(Query("Posts").Where("txid", CondEq, posttxid));
-        if (!err.ok()) return err;
-
-        // Restore Post item
-        err = UpsertWithCommit("Posts", post_item);
-        if (!err.ok()) return err;
-
-        // Clear history
-        err = DeleteWithCommit(Query("PostsHistory").Where("txid", CondEq, posttxid).Where("txidEdit", CondEq, posttxid_edit));
-        return err;
-    } else if (err.code() == 13) {
-        // History is empty - its normal, simple remove post
-        return DeleteWithCommit(Query("Posts").Where("txid", CondEq, posttxid));
+        } else {
+            return Error(errOK);
+        }
     } else {
         return err;
     }
+
 }
 
 // -------------------------------

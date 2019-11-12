@@ -199,31 +199,6 @@ bool AddrIndex::indexTags(const CTransactionRef& tx, CBlockIndex* pindex)
     return true;
 }
 
-bool AddrIndex::indexPost(const CTransactionRef& tx, CBlockIndex* pindex)
-{
-    // First get post
-    reindexer::Item postItm;
-    if (!g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, tx->GetHash().GetHex()).Where("txidEdit", CondEq, ""), postItm).ok()) {
-        if (!g_pocketdb->SelectOne(reindexer::Query("PostsHistory").Where("txid", CondEq, tx->GetHash().GetHex()).Where("txidEdit", CondEq, ""), postItm).ok()) {
-            if (!g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txidEdit", CondEq, tx->GetHash().GetHex()), postItm).ok()) {
-                if (!g_pocketdb->SelectOne(reindexer::Query("PostsHistory").Where("txidEdit", CondEq, tx->GetHash().GetHex()), postItm).ok()) {
-                    return false;
-                }
-            }
-        }
-    }
-
-
-
-
-
-
-
-
-
-
-    return true;
-}
 //-----------------------------------------------------
 // RATINGS
 //-----------------------------------------------------
@@ -244,7 +219,7 @@ bool AddrIndex::indexRating(const CTransactionRef& tx,
 
     // Find post for get author address
     Item postItm;
-    if (!g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, posttxid), postItm).ok()) return false;
+    if (!g_pocketdb->SelectOne(reindexer::Query("Post").Where("otxid", CondEq, posttxid).Where("last", CondEq, true), postItm).ok()) return false;
     std::string post_address = postItm["address"].As<string>();
 
 
@@ -503,18 +478,7 @@ bool AddrIndex::IndexBlock(const CBlock& block, CBlockIndex* pindex)
 
 bool AddrIndex::CheckRItemExists(std::string table, std::string txid)
 {
-    if (table == "Posts")
-    {
-        if (g_pocketdb->Exists(reindexer::Query("Posts").Where("txid", CondEq, txid).Where("txidEdit", CondEq, ""))) return true;
-        if (g_pocketdb->Exists(reindexer::Query("Posts").Where("txidEdit", CondEq, txid))) return true;
-        if (g_pocketdb->Exists(reindexer::Query("PostsHistory").Where("txid", CondEq, txid).Where("txidEdit", CondEq, ""))) return true;
-        if (g_pocketdb->Exists(reindexer::Query("PostsHistory").Where("txidEdit", CondEq, txid))) return true;
-        return false;
-    }
-    else
-    {
-        return g_pocketdb->Exists(reindexer::Query(table).Where("txid", CondEq, txid));
-    }
+    return g_pocketdb->Exists(reindexer::Query(table).Where("txid", CondEq, txid));
 }
 
 bool AddrIndex::WriteMemRTransaction(reindexer::Item& item)
@@ -524,22 +488,16 @@ bool AddrIndex::WriteMemRTransaction(reindexer::Item& item)
 
 bool AddrIndex::WriteRTransaction(std::string table, reindexer::Item& item, int height)
 {
-    std::string _txid_check_exists = item["txid"].As<string>();
-
     // If new mempool transaction
     if (table == "Mempool") {
         // If received transaction is mempool
         // need check general table - maybe data already received and worked?
-        if (CheckRItemExists(item["table"].As<string>(), _txid_check_exists)) return true;
+        if (CheckRItemExists(item["table"].As<string>(), item["txid"].As<string>())) return true;
         if (g_pocketdb->UpsertWithCommit("Mempool", item).ok()) return true;
         return false;
     }
-    // Or post transaction?
-    else if (table == "Posts" && item["txidEdit"].As<string>() != "") {
-        _txid_check_exists = item["txidEdit"].As<string>();
-    }
 
-    if (CheckRItemExists(table, _txid_check_exists)) return true;
+    if (CheckRItemExists(table, item["txid"].As<string>())) return true;
 
     // For all tables, except Mempool, need set `block` number
     item["block"] = height;
@@ -550,14 +508,8 @@ bool AddrIndex::WriteRTransaction(std::string table, reindexer::Item& item, int 
     }
 
     // New Post
-    if (table == "Posts") {
-        std::string caption_decoded = UrlDecode(item["caption"].As<string>());
-        item["caption_"] = ClearHtmlTags(caption_decoded);
-
-        std::string message_decoded = UrlDecode(item["message"].As<string>());
-        item["message_"] = ClearHtmlTags(message_decoded);
-
-        if (!g_pocketdb->CommitPostItem(item, height).ok()) return false;
+    if (table == "Post") {
+        if (!g_pocketdb->CommitLastPostItem(item, height).ok()) return false;
     }
 
     // Score for post
@@ -654,31 +606,10 @@ bool AddrIndex::RollbackDB(int blockHeight, bool back_to_mempool)
         for (auto& it : _posts_res) {
             reindexer::Item _delete_post_itm = it.GetItem();
             std::string _post_txid = _delete_post_itm["txid"].As<string>();
-
-            // TODO (brangr): Temporaly remove tags
-            {
-                // reindexer::VariantArray vaTags = _post_itm["tags"];
-                // std::vector<std::string> vTags;
-                // for (int i = 0; i < vaTags.size(); i++) {
-                //     std::string _tag = vaTags[i].As<string>();
-                //     if (_tag.size() > 0) {
-                //         vTags.push_back(_tag);
-                //     }
-                // }
-
-                // if (vTags.size() > 0) {
-                //     reindexer::QueryResults _res;
-                //     g_pocketdb->Select(reindexer::Query("Tags").Where("tag", CondSet, vTags), _res);
-                //     for (auto& it : _res) {
-                //         reindexer::Item _tagItm = it.GetItem();
-                //         _tagItm["rating"] = _tagItm["rating"].As<int>() - 1;
-                //         g_pocketdb->Update("Tags", _tagItm);
-                //     }
-                // }
-            }
+            std::string _post_otxid = _delete_post_itm["otxid"].As<string>();
 
             if (back_to_mempool && !insert_to_mempool(_delete_post_itm, "Posts")) return false;
-            if (!g_pocketdb->RestorePostItem(_post_txid, blockHeight).ok()) return false;
+            if (!g_pocketdb->RestoreLastPostItem(_post_txid, _post_otxid, blockHeight).ok()) return false;
         }
     }
 
@@ -1064,10 +995,10 @@ bool AddrIndex::GetRecommendedPostsBySubscriptions(std::string _address, int cou
     for (auto itsub : subscriptions) {
         reindexer::Item queryItm;
         reindexer::Error err = g_pocketdb->SelectOne(
-            reindexer::Query("Posts").Where("address", CondEq, itsub).Sort("time", true),
+            reindexer::Query("Post").Where("address", CondEq, itsub).Where("last", CondEq, true).Sort("time", true),
             queryItm);
         if (err.ok()) {
-            recommendedPosts.emplace(queryItm["txid"].As<string>());
+            recommendedPosts.emplace(queryItm["otxid"].As<string>());
         }
     }
 
@@ -1191,52 +1122,41 @@ bool AddrIndex::GetTXRIData(CTransactionRef& tx, std::string& data)
     // Type of transaction is "pocketnet"
     // First check RIMempool for transactions from mempool
     // If RIMempool empty -> Check general tables
-    reindexer::Item itm;
     bool mempool = true;
-
+    reindexer::Item itm;
     if (!g_pocketdb->SelectOne(reindexer::Query("Mempool").Where("txid", CondEq, txid), itm).ok()) {
         mempool = false;
         
-        Error err;
-        if (ri_table == "Posts") {
-            err = g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, txid).Where("txidEdit", CondEq, ""), itm);
-            if (!err.ok()) err = g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txidEdit", CondEq, txid), itm);
-            if (!err.ok()) {
-                reindexer::Item hist_item;
-                err = g_pocketdb->SelectOne(reindexer::Query("PostsHistory").Where("txid", CondEq, txid).Where("txidEdit", CondEq, ""), hist_item);
-                if (!err.ok()) err = g_pocketdb->SelectOne(reindexer::Query("PostsHistory").Where("txidEdit", CondEq, txid), hist_item);
-                if (err.ok()) {
-                    itm = g_pocketdb->DB()->NewItem("Posts");
-                    itm["txid"] = hist_item["txid"].As<string>();
-                    itm["txidEdit"] = hist_item["txidEdit"].As<string>();
-                    itm["block"] = hist_item["block"].As<int>();
-                    itm["time"] = hist_item["time"].As<int64_t>();
-                    itm["address"] = hist_item["address"].As<string>();
-                    itm["lang"] = hist_item["lang"].As<string>();
-                    itm["caption"] = hist_item["caption"].As<string>();
-                    itm["message"] = hist_item["message"].As<string>();
-                    itm["tags"] = hist_item["tags"];
-                    itm["url"] = hist_item["url"].As<string>();
-                    itm["images"] = hist_item["images"];
-                    itm["settings"] = hist_item["settings"].As<string>();
-                }
-            }
-
-            if (err.ok()) {
-                itm["caption_"] = "";
-                itm["message_"] = "";
-                itm["scoreSum"] = 0;
-                itm["scoreCnt"] = 0;
-                itm["reputation"] = 0;
-            }
-        } else {
-            err = g_pocketdb->SelectOne(reindexer::Query(ri_table).Where("txid", CondEq, txid), itm);
-        }
-        
-        if (!err.ok()) {
+        if (!g_pocketdb->SelectOne(reindexer::Query(ri_table).Where("txid", CondEq, txid), itm).ok()) {
             LogPrintf("WARNING! AddrIndex::GetTXRIData: ridata not found %s\n", txid);
             return false;
         }
+    }
+
+    // Prepare data for rend to another node
+    {
+
+        if (!mempool && ri_table == "User") {
+            itm["last"] = true;
+            itm["reputation"] = 0;
+        }
+
+        if (!mempool && ri_table == "Post") {
+            itm["last"] = true;
+            itm["scoreSum"] = 0;
+            itm["scoreCnt"] = 0;
+            itm["reputation"] = 0;
+            itm["caption_"] = "";
+            itm["message_"] = "";
+        }
+
+        if (!mempool && ri_table == "Comment") {
+            itm["last"] = true;
+            itm["scoreUp"] = 0;
+            itm["scoreDown"] = 0;
+            itm["reputation"] = 0;
+        }
+
     }
 
     ret_data.pushKV("t", (mempool ? "Mempool" : ri_table));
@@ -1371,7 +1291,7 @@ bool AddrIndex::ComputeRHash(CBlockIndex* pindexPrev, std::string& hash)
         {
             std::string postsData = "";
             reindexer::QueryResults postsRes;
-            g_pocketdb->Select(reindexer::Query("Posts").Where("block", CondEq, pindexPrev->nHeight).Sort("txid", false), postsRes);
+            g_pocketdb->Select(reindexer::Query("Post").Where("block", CondEq, pindexPrev->nHeight).Sort("txid", false), postsRes);
             for (auto& postIt : postsRes) {
                 std::string _postsData = "";
                 reindexer::Item postItm(postIt.GetItem());
@@ -1570,6 +1490,8 @@ bool AddrIndex::ComputeRHash(CBlockIndex* pindexPrev, std::string& hash)
 
             if (postRatingsData != "") data += ComputeHash(postRatingsData);
         }
+
+        // TODO (brangr): Comments
     }
 
     // Get previous block data hash
@@ -1635,8 +1557,8 @@ UniValue AddrIndex::GetUniValue(const CTransactionRef& tx, Item& item, std::stri
     g_addrindex->FindPocketNetAsmString(tx, asmStr);
     oitm.pushKV("asm", asmStr);
 
-    if (table == "Posts") {
-        oitm.pushKV("txidEdit", item["txidEdit"].As<string>());
+    if (table == "Post") {
+        oitm.pushKV("otxid", item["otxid"].As<string>());
     }
     
     if (table == "Scores") {

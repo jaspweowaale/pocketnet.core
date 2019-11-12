@@ -94,8 +94,8 @@ public:
     void SearchTags(std::string search, int count, std::map<std::string, int>& tags, int& totalCount);
 
     // Add new Post with move old version to history table
-    Error CommitPostItem(Item& itm, int height);
-    Error RestorePostItem(std::string posttxid, int height);
+    Error CommitLastPostItem(Item& itm, int height, bool disable_old = true);
+    Error RestoreLastPostItem(std::string txid, std::string otxid, int height);
 
     Error CommitLastCommentItem(Item& itm, int height, bool disable_old = true);
     Error RestoreLastCommentItem(std::string txid, std::string otxid, int height);
