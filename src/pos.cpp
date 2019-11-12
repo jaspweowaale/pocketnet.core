@@ -558,7 +558,7 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
                     }
 
                     reindexer::Item _post_itm;
-                    if (!g_pocketdb->SelectOne(reindexer::Query("Post").Where("otxid", CondEq, _score_itm["posttxid"].As<string>()).Where("last", CondEq, true), _post_itm).ok()) {
+                    if (!g_pocketdb->SelectOne(reindexer::Query("Posts").Where("otxid", CondEq, _score_itm["posttxid"].As<string>()).Where("last", CondEq, true), _post_itm).ok()) {
                         LogPrintf("--- GetRatingRewards error get post: %s\n", _score_itm["posttxid"].As<string>());
                         continue;
                     }
