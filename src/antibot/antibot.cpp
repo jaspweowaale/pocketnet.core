@@ -64,6 +64,7 @@ int AntiBot::getLimit(CHECKTYPE _type, ABMODE _mode, int height) {
 //-----------------------------------------------------
 
 //-----------------------------------------------------
+// TODO (brangr): Нужно ли учитывать редактирования/удаления в общем счетчика лимитов?
 int getLimitsCount(std::string _table, std::string _address, int64_t _time) {
     int count = 0;
 
@@ -83,13 +84,7 @@ int getLimitsCount(std::string _table, std::string _address, int64_t _time) {
         for (auto& m : mem_res) {
             reindexer::Item mItm = m.GetItem();
             std::string table = mItm["table"].As<string>();
-            std::string txid_source = mItm["txid_source"].As<string>();
-
-            // Edited posts not count in limits
-            if (table == "Posts" && txid_source != "") continue;
-
             std::string t_src = DecodeBase64(mItm["data"].As<string>());
-
             reindexer::Item t_itm = g_pocketdb->DB()->NewItem(_table);
             if (t_itm.FromJSON(t_src).ok()) {
                 if (t_itm["time"].As<int64_t>() <= _time && t_itm["address"].As<string>() == _address) {
@@ -305,7 +300,7 @@ bool AntiBot::check_score(UniValue oitm, BlockVTX& blockVtx, bool checkMempool, 
     bool not_found = false;
     std::string _post_address;
     reindexer::Item postItm;
-    if (g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, _post), postItm).ok()) {
+    if (g_pocketdb->SelectOne(reindexer::Query("Post").Where("otxid", CondEq, _post).Where("last", CondEq, true), postItm).ok()) {
         _post_address = postItm["address"].As<string>();
 
         // Score to self post
@@ -319,9 +314,9 @@ bool AntiBot::check_score(UniValue oitm, BlockVTX& blockVtx, bool checkMempool, 
         not_found = true;
 
         // Maybe in current block?
-        if (blockVtx.Exists("Posts")) {
-            for (auto& mtx : blockVtx.Data["Posts"]) {
-                if (mtx["txid"].get_str() == _post) {
+        if (blockVtx.Exists("Post")) {
+            for (auto& mtx : blockVtx.Data["Post"]) {
+                if (mtx["otxid"].get_str() == _post) {
                     _post_address = mtx["address"].get_str();
                     not_found = false;
                     break;
@@ -442,11 +437,7 @@ bool AntiBot::check_complain(UniValue oitm, BlockVTX& blockVtx, bool checkMempoo
     // Check score to self
     bool not_found = false;
     reindexer::Item postItm;
-    if (g_pocketdb->SelectOne(
-        reindexer::Query("Posts")
-        .Where("txid", CondEq, _post),
-        postItm
-    ).ok()) {
+    if (g_pocketdb->SelectOne(reindexer::Query("Post").Where("otxid", CondEq, _post).Where("last", CondEq, true), postItm).ok()) {
         // Score to self post
         if (postItm["address"].As<string>() == _address) {
             result = ANTIBOTRESULT::SelfComplain;
@@ -458,9 +449,9 @@ bool AntiBot::check_complain(UniValue oitm, BlockVTX& blockVtx, bool checkMempoo
         not_found = true;
 
         // Maybe in current block?
-        if (blockVtx.Exists("Posts")) {
-            for (auto& mtx : blockVtx.Data["Posts"]) {
-                if (mtx["txid"].get_str() == _post) {
+        if (blockVtx.Exists("Post")) {
+            for (auto& mtx : blockVtx.Data["Post"]) {
+                if (mtx["otxid"].get_str() == _post) {
                     not_found = false;
                     break;
                 }
@@ -814,7 +805,7 @@ bool AntiBot::check_comment(UniValue oitm, BlockVTX& blockVtx, bool checkMempool
     }
 
     Item post_itm;
-    if (_postid == "" || !g_pocketdb->SelectOne(Query("Posts").Where("txid", CondEq, _postid), post_itm).ok()) {
+    if (_postid == "" || !g_pocketdb->SelectOne(Query("Post").Where("otxid", CondEq, _postid).Where("last", CondEq, true), post_itm).ok()) {
         result = ANTIBOTRESULT::NotFound;
         return false;
     }
@@ -923,8 +914,9 @@ bool AntiBot::check_comment_edit(UniValue oitm, BlockVTX& blockVtx, bool checkMe
         return false;
     }
 
+    // TODO (brangr): проверит на удаленный пост
     Item post_itm;
-    if (_postid == "" || !g_pocketdb->SelectOne(Query("Posts").Where("txid", CondEq, _postid), post_itm).ok()) {
+    if (_postid == "" || !g_pocketdb->SelectOne(Query("Post").Where("otxid", CondEq, _postid).Where("last", CondEq, true), post_itm).ok()) {
         result = ANTIBOTRESULT::NotFound;
         return false;
     }
@@ -1395,7 +1387,7 @@ bool AntiBot::AllowModifyReputationOverPost(std::string _score_address, std::str
             .Where("time", CondLt, (int64_t)tx->nTime)
             .Where("value", CondSet, values)
             .Not().Where("txid", CondEq, tx->GetHash().GetHex())
-        .InnerJoin("posttxid", "txid", CondEq, reindexer::Query("Posts").Where("address", CondEq, _post_address))
+        .InnerJoin("posttxid", "otxid", CondEq, reindexer::Query("Post").Where("address", CondEq, _post_address).Where("last", CondEq, true))
     );
     if (scores_one_to_one_count >= _max_scores_one_to_one) return false;
     
@@ -1422,8 +1414,7 @@ bool AntiBot::AllowModifyReputationOverComment(std::string _score_address, std::
             .Where("time", CondLt, (int64_t)tx->nTime)
             .Where("value", CondSet, values)
             .Not().Where("txid", CondEq, tx->GetHash().GetHex())
-            // join by original id with txid, not otxid
-            .InnerJoin("commentid", "txid", CondEq, reindexer::Query("Comment").Where("address", CondEq, _comment_address))
+            .InnerJoin("commentid", "otxid", CondEq, reindexer::Query("Comment").Where("address", CondEq, _comment_address).Where("last", CondEq, true))
     );
     if (scores_one_to_one_count >= _max_scores_one_to_one) return false;
     

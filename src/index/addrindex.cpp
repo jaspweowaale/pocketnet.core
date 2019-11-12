@@ -45,34 +45,8 @@ bool AddrIndex::insert_to_mempool(reindexer::Item& item, std::string table)
 {
     reindexer::Item memItm = g_pocketdb->DB()->NewItem("Mempool");
     memItm["table"] = table;
-
-    if (table == "Posts") {
-        item["caption_"] = "";
-        item["message_"] = "";
-
-        // Mempool:
-        //   txid - txid of post transaction
-        //   txid_source - txid of original post transaction
-        // Posts:
-        //   txid - txid of original post transaction
-        //   txidEdit - txid of post transaction
-
-        std::string post_txid = item["txid"].As<string>();
-        std::string post_txidEdit = item["txidEdit"].As<string>();
-        if (post_txidEdit == "") {
-            post_txidEdit = post_txid;
-            post_txid = "";
-        }
-
-        memItm["txid"] = post_txidEdit;
-        memItm["txid_source"] = post_txid;
-    } else {
-        memItm["txid"] = item["txid"].As<string>();
-        memItm["txid_source"] = "";
-    }
-    
+    memItm["txid"] = item["txid"].As<string>();
     memItm["data"] = EncodeBase64(item.GetJSON().ToString());
-
     return WriteMemRTransaction(memItm);
 }
 
@@ -151,49 +125,6 @@ bool AddrIndex::indexAddress(const CTransactionRef& tx, CBlockIndex* pindex)
         item["block"] = pindex->nHeight;
         item["time"] = (int64_t)tx->nTime;
         if (!g_pocketdb->UpsertWithCommit("Addresses", item).ok()) return false;
-    }
-
-    return true;
-}
-
-bool AddrIndex::indexTags(const CTransactionRef& tx, CBlockIndex* pindex)
-{
-    // Check this transaction contains `Post`
-    std::string ri_table;
-    if (!GetPocketnetTXType(tx, ri_table) || ri_table != "Posts") return true;
-
-    // First get post with tags
-    reindexer::Item postItm;
-    if (!g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, tx->GetHash().GetHex()), postItm).ok()) return false;
-
-    // Parse tags and check exists
-    reindexer::VariantArray vaTags = postItm["tags"];
-    std::vector<std::string> vTags;
-    for (int i = 0; i < vaTags.size(); i++) {
-        std::string _tag = vaTags[i].As<string>();
-        if (_tag.size() > 0) {
-            reindexer::QueryResults _res;
-            g_pocketdb->Select(reindexer::Query("Tags").Where("tag", CondEq, _tag), _res);
-            if (_res.Count() > 0) {
-                for (auto& it : _res) {
-                    reindexer::Item _tagItm = it.GetItem();
-                    _tagItm["rating"] = _tagItm["rating"].As<int>() + 1;
-                    g_pocketdb->Update("Tags", _tagItm);
-                }
-            } else {
-                vTags.push_back(_tag);
-            }
-        }
-    }
-
-    // Save new
-    if (vTags.size() > 0) {
-        for (auto& it : vTags) {
-            reindexer::Item _tagItm = g_pocketdb->DB()->NewItem("Tags");
-            _tagItm["tag"] = it;
-            _tagItm["rating"] = 1;
-            g_pocketdb->Upsert("Tags", _tagItm);
-        }
     }
 
     return true;
@@ -448,11 +379,6 @@ bool AddrIndex::IndexBlock(const CBlock& block, CBlockIndex* pindex)
             LogPrintf("(AddrIndex::IndexBlock) indexCommentRating - tx (%s)\n", tx->GetHash().GetHex());
             return false;
         }
-        
-        if (ri_table == "Posts" && !indexPost(tx, pindex)) {
-            LogPrintf("(AddrIndex::IndexBlock) indexPost - tx (%s)\n", tx->GetHash().GetHex());
-            return false;
-        }
     }
 
     // Save ratings for users
@@ -602,13 +528,13 @@ bool AddrIndex::RollbackDB(int blockHeight, bool back_to_mempool)
     // Rollback Posts
     {
         reindexer::QueryResults _posts_res;
-        if (!g_pocketdb->DB()->Select(reindexer::Query("Posts").Where("block", CondGt, blockHeight), _posts_res).ok()) return false;
+        if (!g_pocketdb->DB()->Select(reindexer::Query("Post").Where("block", CondGt, blockHeight), _posts_res).ok()) return false;
         for (auto& it : _posts_res) {
             reindexer::Item _delete_post_itm = it.GetItem();
             std::string _post_txid = _delete_post_itm["txid"].As<string>();
             std::string _post_otxid = _delete_post_itm["otxid"].As<string>();
 
-            if (back_to_mempool && !insert_to_mempool(_delete_post_itm, "Posts")) return false;
+            if (back_to_mempool && !insert_to_mempool(_delete_post_itm, "Post")) return false;
             if (!g_pocketdb->RestoreLastPostItem(_post_txid, _post_otxid, blockHeight).ok()) return false;
         }
     }

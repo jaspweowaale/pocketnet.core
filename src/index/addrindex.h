@@ -91,11 +91,7 @@ private:
         std::map<std::string, int>& userReputations,
         std::map<std::string, std::pair<int, int>>& commentRatings,
         std::map<std::string, int>& commentReputations);
-	/*
-		Indexing block transactions for collect tags.
-		OP_RETURN can contains `OR_POST` value - its Post
-	*/
-	bool indexTags(const CTransactionRef& tx, CBlockIndex* pindex);
+
 	/*
 		Save first occurrence of address.
 		Essentially the first mention in out of transactions.
@@ -114,10 +110,6 @@ private:
 		Increment rating of Comment
 	*/
 	bool computeCommentRatings(CBlockIndex* pindex, std::map<std::string, std::pair<int, int>>& commentRatings, std::map<std::string, int>& commentReputations);
-    /*
-        Indexing posts data
-    */
-    bool indexPost(const CTransactionRef& tx, CBlockIndex* pindex);
 
 
 public:

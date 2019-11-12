@@ -2600,7 +2600,7 @@ UniValue getmissedinfo(const JSONRPCRequest& request)
                 std::vector<std::string> spl;
                 boost::split(spl, asmstr, boost::is_any_of("\t "));
                 if (spl.size() == 3) {
-                    if (spl[1] == OR_POST || spl[1] == OR_POSTEDIT)
+                    if (spl[1] == OR_POST)
                         optype = "share";
                     else if (spl[1] == OR_SCORE)
                         optype = "upvoteShare";

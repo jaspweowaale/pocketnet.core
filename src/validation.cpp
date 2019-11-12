@@ -2751,8 +2751,6 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
 						optype = "share";
 						sharesCnt += 1;
 					}
-					// else if (spl[1] == OR_POSTEDIT)
-					// 	optype = "shareEdit";
 					else if (spl[1] == OR_SCORE)
 						optype = "upvoteShare";
 					else if (spl[1] == OR_SUBSCRIBE)
@@ -2827,8 +2825,9 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
                         reindexer::Item itmS(queryResS[0].GetItem());
 
                         reindexer::Error errP = g_pocketdb->DB()->Select(
-                            reindexer::Query("Posts", 0, 1)
-                                .Where("txid", CondEq, itmS["posttxid"].As<string>()),
+                            reindexer::Query("Post", 0, 1)
+                                .Where("otxid", CondEq, itmS["posttxid"].As<string>())
+                                .Where("last", CondEq, true),
                             queryResP);
 
                         if (errP.ok() && queryResP.Count() > 0) {
@@ -2878,8 +2877,8 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
                         reindexer::Error errP = g_pocketdb->DB()->Select(
                             reindexer::Query("Comment", 0, 1)
                             .Where("otxid", CondEq, itmS["commentid"].As<string>())
-                            .Where("last", CondEq, true),
-                            queryResP);
+                            .Where("last", CondEq, true)
+                            ,queryResP);
 
                         if (errP.ok() && queryResP.Count() > 0) {
                             reindexer::Item itmP(queryResP[0].GetItem());
@@ -2910,9 +2909,10 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
                         {
                             reindexer::QueryResults queryResP;
                             reindexer::Error errP = g_pocketdb->DB()->Select(
-                                reindexer::Query("Posts", 0, 1)
-                                    .Where("txid", CondEq, itmS["postid"].As<string>()),
-                                queryResP);
+                                reindexer::Query("Post", 0, 1)
+                                    .Where("txid", CondEq, itmS["postid"].As<string>())
+                                    .Where("last", CondEq, true)
+                                ,queryResP);
 
                             if (errP.ok() && queryResP.Count() > 0) {
                                 reindexer::Item itmP(queryResP[0].GetItem());
@@ -2985,10 +2985,11 @@ void CChainState::NotifyWSClients(const CBlock& block, CBlockIndex* blockIndex)
 
 			reindexer::QueryResults queryResShares;
 			reindexer::Error err = g_pocketdb->DB()->Select(
-				reindexer::Query("Posts")
+				reindexer::Query("Post")
 				.Where("block", CondEq, blockIndex->nHeight)
-				.Where("address", CondSet, _addrs),
-				queryResShares);
+				.Where("address", CondSet, _addrs)
+                .Where("last", CondEq, true)
+				,queryResShares);
 			if (err.ok() && queryResShares.Count() > 0) {
 				msg.pushKV("sharesSubscr", (int)queryResShares.Count());
 			}
@@ -3774,7 +3775,7 @@ bool FindRTransaction(UniValue& _txs_src, const CTransactionRef& tx, std::string
         std::string _tx_src = _txs_src[txid].get_str();
         UniValue _tx(UniValue::VOBJ);
         if (!_tx.read(_tx_src)) {
-            LogPrintf("700001: Transaction RI data parse failed (%s): %s\n", txid, _tx_src);
+            LogPrintf("Transaction RI data parse failed (_txs_src) (%s): %s\n", txid, _tx_src);
             return false;
         }
 
@@ -3782,7 +3783,7 @@ bool FindRTransaction(UniValue& _txs_src, const CTransactionRef& tx, std::string
         itm = g_pocketdb->DB()->NewItem(ri_table);
         _tx_src = DecodeBase64(_tx["d"].get_str());
         if (!itm.FromJSON(_tx_src).ok()) {
-            LogPrintf("700002: Transaction RI data parse failed (%s): %s\n", txid, _tx_src);
+            LogPrintf("Transaction RI data parse failed (_txs_src_decode) (%s): %s\n", txid, _tx_src);
             return false;
         }
 
@@ -3793,7 +3794,7 @@ bool FindRTransaction(UniValue& _txs_src, const CTransactionRef& tx, std::string
             itm = g_pocketdb->DB()->NewItem(ri_table);
             _tx_src = DecodeBase64(_data);
             if (!itm.FromJSON(_tx_src).ok()) {
-                LogPrintf("7000021: Transaction RI data parse failed (%s): %s\n", txid, _tx_src);
+                LogPrintf("Transaction RI data parse failed (_txs_src_mem) (%s): %s\n", txid, _tx_src);
                 return false;
             }
         }
@@ -3801,22 +3802,14 @@ bool FindRTransaction(UniValue& _txs_src, const CTransactionRef& tx, std::string
         return true;
     }
     else {
-        if (ri_table == "Posts") {
-            if (g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, txid).Where("txidEdit", CondEq, ""), itm).ok()) return true;
-            if (g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txidEdit", CondEq, txid), itm).ok()) return true;
-            if (g_pocketdb->SelectOne(reindexer::Query("PostsHistory").Where("txid", CondEq, txid).Where("txidEdit", CondEq, ""), itm).ok()) return true;
-            if (g_pocketdb->SelectOne(reindexer::Query("PostsHistory").Where("txidEdit", CondEq, txid), itm).ok()) return true;
-        } else {
-            if (g_pocketdb->SelectOne(reindexer::Query(ri_table).Where("txid", CondEq, txid), itm).ok()) return true;
-        }
-
+        if (g_pocketdb->SelectOne(reindexer::Query(ri_table).Where("txid", CondEq, txid), itm).ok()) return true;
         if (g_pocketdb->SelectOne(reindexer::Query("Mempool").Where("txid", CondEq, txid), itm).ok()) {
             ri_table = itm["table"].As<string>();
             std::string _data = itm["data"].As<string>();
 
             itm = g_pocketdb->DB()->NewItem(ri_table);
             if (!itm.FromJSON(DecodeBase64(_data)).ok()) {
-                LogPrintf("700003: Transaction RI data parse failed (%s): %s\n", txid, DecodeBase64(_data));
+                LogPrintf("Transaction RI data parse failed (rdb) (%s): %s\n", txid, DecodeBase64(_data));
                 return false;
             }
 
@@ -3825,7 +3818,7 @@ bool FindRTransaction(UniValue& _txs_src, const CTransactionRef& tx, std::string
     }
 
     // Data not found
-    LogPrintf("700004: Transaction RI data Not Found (%s)\n", txid);
+    LogPrintf("Transaction RI data Not Found (%s)\n", txid);
     return false;
 }
 

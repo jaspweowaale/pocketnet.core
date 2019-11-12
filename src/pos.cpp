@@ -558,7 +558,7 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
                     }
 
                     reindexer::Item _post_itm;
-                    if (!g_pocketdb->SelectOne( reindexer::Query("Posts").Where("txid", CondEq, _score_itm["posttxid"].As<string>()), _post_itm ).ok()) {
+                    if (!g_pocketdb->SelectOne(reindexer::Query("Post").Where("otxid", CondEq, _score_itm["posttxid"].As<string>()).Where("last", CondEq, true), _post_itm).ok()) {
                         LogPrintf("--- GetRatingRewards error get post: %s\n", _score_itm["posttxid"].As<string>());
                         continue;
                     }
@@ -579,7 +579,7 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
                     }
 
                     reindexer::Item _comment_itm;
-                    if (!g_pocketdb->SelectOne( reindexer::Query("Comment").Where("otxid", CondEq, _score_itm["commentid"].As<string>()), _comment_itm ).ok()) {
+                    if (!g_pocketdb->SelectOne( reindexer::Query("Comment").Where("otxid", CondEq, _score_itm["commentid"].As<string>()).Where("last", CondEq, true), _comment_itm ).ok()) {
                         LogPrintf("--- GetRatingRewards error get comment: %s\n", _score_itm["posttxid"].As<string>());
                         continue;
                     }

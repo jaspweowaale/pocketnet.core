@@ -128,7 +128,6 @@ bool PocketDB::InitDB(std::string table)
     if (table == "Mempool" || table == "ALL") {
         db->OpenNamespace("Mempool", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Mempool", {"txid", "hash", "string", IndexOpts().PK()});
-        db->AddIndex("Mempool", {"txid_source", "hash", "string", IndexOpts()});
         db->AddIndex("Mempool", {"table", "-", "string", IndexOpts()});
         db->AddIndex("Mempool", {"data", "-", "string", IndexOpts()});
         db->Commit("Mempool");
@@ -972,8 +971,8 @@ bool PocketDB::GetHashItem(Item& item, std::string table, bool with_referrer, st
 {
     std::string data = "";
     //------------------------
-    if (table == "Posts") {
-        // self.url.v + self.caption.v + self.message.v + self.tags.v.join(',') + self.images.v.join(',') + self.txid_edit.v
+    if (table == "Post") {
+        // self.url.v + self.caption.v + self.message.v + self.tags.v.join(',') + self.images.v.join(',') + self.otxid.v
         data += item["url"].As<string>();
         data += item["caption"].As<string>();
         data += item["message"].As<string>();
@@ -986,7 +985,7 @@ bool PocketDB::GetHashItem(Item& item, std::string table, bool with_referrer, st
         for (size_t i = 0; i < va_images.size(); ++i)
             data += (i ? "," : "") + va_images[i].As<string>();
 
-        data += item["txidEdit"].As<string>();
+        data += item["txid"].As<string>();
     }
     
     if (table == "Scores") {
