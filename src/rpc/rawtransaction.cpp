@@ -37,7 +37,6 @@
 #include "antibot/antibot.h"
 #include "html.h"
 #include "index/addrindex.h"
-#include <reindexer\tools\stringstools.cc>
 
 static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry)
 {
@@ -3155,7 +3154,8 @@ UniValue search(const JSONRPCRequest& request)
     std::string type = "";
     if (request.params.size() > 1) {
         RPCTypeCheckArgument(request.params[1], UniValue::VSTR);
-        type = lower(request.params[1].get_str());
+        std::string type = request.params[1].get_str();
+        std::transform(type.begin(), type.end(), type.begin(), ::tolower);
     }
 
     if (type != "all" && type != "posts" && type != "tags" && type != "users") {
@@ -3446,7 +3446,8 @@ UniValue gettags(const JSONRPCRequest& request)
         UniValue t(UniValue::VARR);
         reindexer::VariantArray va = postItm["tags"];
         for (unsigned int idx = 0; idx < va.size(); idx++) {
-            std::string sTag = lower(va[idx].As<string>());
+            std::string sTag = va[idx].As<string>();
+            std::transform(sTag.begin(), sTag.end(), sTag.begin(), ::tolower);
             if (std::all_of(sTag.begin(), sTag.end(), [](unsigned char ch) { return ::isdigit(ch) || ::isalpha(ch); })) {
                 if (mapTags.count(sTag) == 0)
                     mapTags[sTag] = 1;
