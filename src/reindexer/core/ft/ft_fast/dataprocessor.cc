@@ -7,6 +7,7 @@
 #include "core/ft/typos.h"
 
 #include "tools/logger.h"
+#include "tools/serializer.h"
 #include "tools/stringstools.h"
 
 using std::chrono::high_resolution_clock;
@@ -15,7 +16,6 @@ using std::placeholders::_1;
 using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 using std::bind;
-using std::tie;
 
 namespace reindexer {
 
@@ -24,7 +24,7 @@ const int kDigitUtfSizeof = 1;
 void DataProcessor::Process(bool multithread) {
 	multithread_ = multithread;
 
-	fast_hash_map<string, WordEntry> words_um;
+	words_map words_um;
 	auto tm0 = high_resolution_clock::now();
 	size_t szCnt = buildWordsMap(words_um);
 	auto tm2 = high_resolution_clock::now();
@@ -48,9 +48,8 @@ void DataProcessor::Process(bool multithread) {
 	size_t idsetcnt = 0;
 
 	auto wIt = words.begin() + wrdOffset;
-	auto status = holder_.status_;
 
-	thread idrelsetCommitThread([&wIt, &found, getWordByIdFunc, &tm4, &idsetcnt, &words_um, status]() {
+	thread idrelsetCommitThread([&wIt, &found, getWordByIdFunc, &tm4, &idsetcnt, &words_um]() {
 		uint32_t i = 0;
 		for (auto keyIt = words_um.begin(); keyIt != words_um.end(); keyIt++, i++) {
 			// Pack idrelset
@@ -65,15 +64,7 @@ void DataProcessor::Process(bool multithread) {
 				idsetcnt += sizeof(*wIt);
 			}
 
-			if (status == CreateNew) {
-				word->cur_step_pos_ = word->vids_.end().pos();
-			}
 			word->vids_.insert(word->vids_.end(), keyIt->second.vids_.begin(), keyIt->second.vids_.end());
-
-			if (status == FullRebuild) {
-				word->cur_step_pos_ = word->vids_.end().pos();
-			}
-
 			word->vids_.shrink_to_fit();
 
 			keyIt->second.vids_.clear();
@@ -95,18 +86,17 @@ void DataProcessor::Process(bool multithread) {
 	auto tm5 = high_resolution_clock::now();
 
 	logPrintf(LogInfo, "FastIndexText[%d] built with [%d uniq words, %d typos, %dKB text size, %dKB suffixarray size, %dKB idrelsets size]",
-			  int(holder_.steps.size()), int(words_um.size()), int(holder_.GetTypos().size()), int(szCnt / 1024),
-			  int(suffixes.heap_size() / 1024), int(idsetcnt / 1024));
+			  holder_.steps.size(), words_um.size(), holder_.GetTypos().size(), szCnt / 1024, suffixes.heap_size() / 1024, idsetcnt / 1024);
 
 	logPrintf(LogInfo,
 			  "DataProcessor::Process elapsed %d ms total [ build words %d ms, build typos %d ms | build suffixarry %d ms | sort "
 			  "idrelsets %d ms]\n",
-			  int(duration_cast<milliseconds>(tm5 - tm0).count()), int(duration_cast<milliseconds>(tm2 - tm0).count()),
-			  int(duration_cast<milliseconds>(tm5 - tm4).count()), int(duration_cast<milliseconds>(tm3 - tm2).count()),
-			  int(duration_cast<milliseconds>(tm4 - tm2).count()));
+			  duration_cast<milliseconds>(tm5 - tm0).count(), duration_cast<milliseconds>(tm2 - tm0).count(),
+			  duration_cast<milliseconds>(tm5 - tm4).count(), duration_cast<milliseconds>(tm3 - tm2).count(),
+			  duration_cast<milliseconds>(tm4 - tm2).count());
 }
 
-vector<WordIdType> DataProcessor::BuildSuffix(fast_hash_map<std::string, WordEntry> &words_um, DataHolder &holder) {
+vector<WordIdType> DataProcessor::BuildSuffix(words_map &words_um, DataHolder &holder) {
 	auto &words = holder.GetWords();
 
 	auto &suffix = holder.GetSuffix();
@@ -141,14 +131,13 @@ vector<WordIdType> DataProcessor::BuildSuffix(fast_hash_map<std::string, WordEnt
 	return found;
 }
 
-size_t DataProcessor::buildWordsMap(fast_hash_map<string, WordEntry> &words_um) {
-	// int maxIndexWorkers = !this->opts_.IsDense() ? std::thread::hardware_concurrency() : 0;
+size_t DataProcessor::buildWordsMap(words_map &words_um) {
 	uint32_t maxIndexWorkers = multithread_ ? std::thread::hardware_concurrency() : 0;
 	if (!maxIndexWorkers) maxIndexWorkers = 1;
 	if (maxIndexWorkers > 8) maxIndexWorkers = 8;
 	size_t szCnt = 0;
 	struct context {
-		fast_hash_map<string, WordEntry> words_um;
+		words_map words_um;
 		std::thread thread;
 	};
 	unique_ptr<context[]> ctxs(new context[maxIndexWorkers]);
@@ -221,7 +210,7 @@ size_t DataProcessor::buildWordsMap(fast_hash_map<string, WordEntry> &words_um) 
 					it->second.vids_ = IdRelSet();
 				}
 			}
-			fast_hash_map<string, WordEntry>().swap(ctxs[i].words_um);
+			words_map().swap(ctxs[i].words_um);
 		}
 	}
 
@@ -238,11 +227,11 @@ size_t DataProcessor::buildWordsMap(fast_hash_map<string, WordEntry> &words_um) 
 
 	// Check and print potential stop words
 	if (holder_.cfg_->logLevel >= LogInfo) {
-		string str;
+		WrSerializer out;
 		for (auto &w : words_um) {
-			if (w.second.vids_.size() > vdocs.size() / 5) str += w.first + " ";
+			if (w.second.vids_.size() > vdocs.size() / 5) out << w.first << " ";
 		}
-		logPrintf(LogInfo, "Potential stop words: %s", str.c_str());
+		logPrintf(LogInfo, "Potential stop words: %s", out.Slice());
 	}
 	vector<h_vector<pair<string_view, uint32_t>, 8>>().swap(holder_.vdocsTexts);
 
@@ -250,8 +239,8 @@ size_t DataProcessor::buildWordsMap(fast_hash_map<string, WordEntry> &words_um) 
 	return szCnt;
 }
 
-void DataProcessor::buildVirtualWord(const string &word, fast_hash_map<string, WordEntry> &words_um, VDocIdType docType, int rfield,
-									 size_t insertPos, std::vector<string> &output) {
+void DataProcessor::buildVirtualWord(string_view word, words_map &words_um, VDocIdType docType, int rfield, size_t insertPos,
+									 std::vector<string> &output) {
 	auto &vdocs = holder_.vdocs_;
 
 	auto &vdoc(vdocs[docType]);
@@ -288,7 +277,7 @@ void DataProcessor::buildTyposMap(uint32_t startPos, const vector<WordIdType> &f
 
 		auto wordId = holder_.BuildWordId(startPos);
 		mktypos(tctx, holder_.GetSuffix().word_at(holder_.GetSuffixWordId(wordId)), holder_.cfg_->maxTyposInWord, holder_.cfg_->maxTypoLen,
-				[&typos, wordId](const string &typo, int) { typos.emplace(typo, wordId); });
+				[&typos, wordId](string_view typo, int) { typos.emplace(typo, wordId); });
 		startPos++;
 	}
 

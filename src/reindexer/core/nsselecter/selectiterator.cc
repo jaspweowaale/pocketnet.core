@@ -2,6 +2,7 @@
 #include "selectiterator.h"
 #include <algorithm>
 #include <cmath>
+#include "core/index/indexiterator.h"
 
 namespace reindexer {
 
@@ -9,8 +10,8 @@ using std::min;
 using std::max;
 
 SelectIterator::SelectIterator() {}
-SelectIterator::SelectIterator(const SelectKeyResult &res, OpType _op, bool _distinct, const string &_name, bool forcedFirst)
-	: SelectKeyResult(res), op(_op), distinct(_distinct), name(_name), forcedFirst_(forcedFirst), type_(Forward) {}
+SelectIterator::SelectIterator(const SelectKeyResult &res, bool dist, const string &n, bool forcedFirst)
+	: SelectKeyResult(res), distinct(dist), name(n), forcedFirst_(forcedFirst), type_(Forward) {}
 
 void SelectIterator::Bind(PayloadType type, int field) {
 	for (Comparator &cmp : comparators_) cmp.Bind(type, field);
@@ -58,7 +59,10 @@ void SelectIterator::Start(bool reverse) {
 
 	lastVal_ = isReverse_ ? INT_MAX : INT_MIN;
 	type_ = isReverse_ ? Reverse : Forward;
-	if (isUnsorted) {
+	if (size() == 1 && begin()->indexForwardIter_) {
+		type_ = UnbuiltSortOrdersIndex;
+		begin()->indexForwardIter_->Start(reverse);
+	} else if (isUnsorted) {
 		type_ = Unsorted;
 
 	} else if (size() == 1 && !isReverse_) {
@@ -120,15 +124,14 @@ bool SelectIterator::nextRev(IdType maxHint) {
 				maxVal = *it->ritset_;
 				lastIt_ = it;
 			}
-		}
-		if (it->isRange_ && it->rrIt_ != it->rrEnd_) {
+		} else if (it->isRange_ && it->rrIt_ != it->rrEnd_) {
 			it->rrIt_ = max(it->rrEnd_, min(it->rrIt_, lastVal_ - 1));
 
 			if (it->rrIt_ != it->rrEnd_ && it->rrIt_ > maxVal) {
 				maxVal = it->rrIt_;
 				lastIt_ = it;
 			}
-		} else if (!it->isRange_ && it->rit_ != it->rend_) {
+		} else if (!it->isRange_ && !it->useBtree_ && it->rit_ != it->rend_) {
 			for (; it->rit_ != it->rend_ && *it->rit_ >= lastVal_; it->rit_++) {
 			}
 			if (it->rit_ != it->rend_ && *it->rit_ > maxVal) {
@@ -146,7 +149,7 @@ bool SelectIterator::nextFwdSingleIdset(IdType minHint) {
 	if (minHint > lastVal_) lastVal_ = minHint - 1;
 	auto it = begin();
 	if (it->useBtree_) {
-		if (it->itset_ != it->setend_ && *it->it_ >= lastVal_) {
+		if (it->itset_ != it->setend_ && *it->itset_ <= lastVal_) {
 			it->itset_ = it->set_->upper_bound(lastVal_);
 		}
 		lastVal_ = (it->itset_ != it->set_->end()) ? *it->itset_ : INT_MAX;
@@ -227,8 +230,12 @@ bool SelectIterator::nextUnsorted() {
 	return false;
 }
 
+bool SelectIterator::nextUnbuiltSortOrders() { return begin()->indexForwardIter_->Next(); }
+
 void SelectIterator::ExcludeLastSet() {
-	if (!End() && lastIt_ != end()) {
+	if (type_ == UnbuiltSortOrdersIndex) {
+		begin()->indexForwardIter_->ExcludeLastSet();
+	} else if (!End() && lastIt_ != end()) {
 		assert(!lastIt_->isRange_);
 		if (lastIt_->useBtree_) {
 			lastIt_->itset_ = lastIt_->setend_;
@@ -256,13 +263,23 @@ void SelectIterator::AppendAndBind(SelectKeyResult &other, PayloadType type, int
 }
 
 double SelectIterator::Cost(int expectedIterations) const {
+	if (type_ == UnbuiltSortOrdersIndex) return -1;
 	if (forcedFirst_) return -GetMaxIterations();
+	double result = joinIndexes.size() * static_cast<double>(std::numeric_limits<float>::max());
+	if (!comparators_.empty()) {
+		result += expectedIterations + 1;
+	} else if (empty()) {
+		result += GetMaxIterations();
+	}
+	return result + static_cast<double>(GetMaxIterations()) * size();
+}
 
-	if (size() < 2 && !comparators_.size()) return double(GetMaxIterations());
-
-	if (comparators_.size()) return expectedIterations + GetMaxIterations() * size() + 1;
-
-	return GetMaxIterations() * size();
+int SelectIterator::Val() const {
+	if (type_ == UnbuiltSortOrdersIndex) {
+		return begin()->indexForwardIter_->Value();
+	} else {
+		return lastVal_;
+	}
 }
 
 void SelectIterator::SetExpectMaxIterations(int expectedIterations) {
@@ -273,20 +290,6 @@ void SelectIterator::SetExpectMaxIterations(int expectedIterations) {
 			r.bsearch_ = itersbsearch < itersloop;
 		}
 	}
-}
-
-int SelectIterator::GetMaxIterations() const {
-	int cnt = 0;
-	for (const SingleSelectKeyResult &r : *this) {
-		if (r.isRange_) {
-			cnt += std::abs(r.rEnd_ - r.rBegin_);
-		} else if (r.useBtree_) {
-			cnt += r.set_->size();
-		} else {
-			cnt += r.ids_.size();
-		}
-	}
-	return cnt;
 }
 
 const char *SelectIterator::TypeName() const {
@@ -307,6 +310,8 @@ const char *SelectIterator::TypeName() const {
 			return "OnlyComparator";
 		case Unsorted:
 			return "Unsorted";
+		case UnbuiltSortOrdersIndex:
+			return "UnbuiltSortOrdersIndex";
 		default:
 			return "<unknown>";
 	}

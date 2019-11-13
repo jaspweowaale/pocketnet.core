@@ -906,49 +906,49 @@ static UniValue getlastblocks(const JSONRPCRequest& request) {
         reindexer::AggregationResult aggRes;
 
         std::map<int, int> oUsers;
-        if (g_pocketdb->SelectAggr(reindexer::Query("Users").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Where("last", CondEq, true).Aggregate("block", AggFacet), "block", aggRes).ok()) {
+        if (g_pocketdb->SelectAggr(reindexer::Query("Users").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Where("last", CondEq, true).Aggregate(AggFacet, {"block"}), "block", aggRes).ok()) {
             for (const auto& f : aggRes.facets) {
-                oUsers.emplace(std::stoi(f.value), f.count);
+                oUsers.emplace(std::stoi(f.values[0]), f.count);
             }
         }
         rStat.emplace("users", oUsers);
 
         std::map<int, int> oPosts;
-        if (g_pocketdb->SelectAggr(reindexer::Query("Posts").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Where("last", CondEq, true).Aggregate("block", AggFacet), "block", aggRes).ok()) {
+        if (g_pocketdb->SelectAggr(reindexer::Query("Posts").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Where("last", CondEq, true).Aggregate(AggFacet, {"block"}), "block", aggRes).ok()) {
             for (const auto& f : aggRes.facets) {
-                oPosts.emplace(std::stoi(f.value), f.count);
+                oPosts.emplace(std::stoi(f.values[0]), f.count);
             }
         }
         rStat.emplace("posts", oPosts);
 
         std::map<int, int> oScores;
-        if (g_pocketdb->SelectAggr(reindexer::Query("Scores").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Aggregate("block", AggFacet), "block", aggRes).ok()) {
+        if (g_pocketdb->SelectAggr(reindexer::Query("Scores").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Aggregate(AggFacet, {"block"}), "block", aggRes).ok()) {
             for (const auto& f : aggRes.facets) {
-                oScores.emplace(std::stoi(f.value), f.count);
+                oScores.emplace(std::stoi(f.values[0]), f.count);
             }
         }
         rStat.emplace("scores", oScores);
 
         std::map<int, int> oCommentScores;
-        if (g_pocketdb->SelectAggr(reindexer::Query("CommentScores").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Aggregate("block", AggFacet), "block", aggRes).ok()) {
+        if (g_pocketdb->SelectAggr(reindexer::Query("CommentScores").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Aggregate(AggFacet, {"block"}), "block", aggRes).ok()) {
             for (const auto& f : aggRes.facets) {
-                oCommentScores.emplace(std::stoi(f.value), f.count);
+                oCommentScores.emplace(std::stoi(f.values[0]), f.count);
             }
         }
         rStat.emplace("commentScores", oCommentScores);
 
         std::map<int, int> oSubscribes;
-        if (g_pocketdb->SelectAggr(reindexer::Query("SubscribesView").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Aggregate("block", AggFacet), "block", aggRes).ok()) {
+        if (g_pocketdb->SelectAggr(reindexer::Query("SubscribesView").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Aggregate(AggFacet, {"block"}), "block", aggRes).ok()) {
             for (const auto& f : aggRes.facets) {
-                oSubscribes.emplace(std::stoi(f.value), f.count);
+                oSubscribes.emplace(std::stoi(f.values[0]), f.count);
             }
         }
         rStat.emplace("subscribes", oSubscribes);
 
         std::map<int, int> oComments;
-        if (g_pocketdb->SelectAggr(reindexer::Query("Comment").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Where("last", CondEq, true).Aggregate("block", AggFacet), "block", aggRes).ok()) {
+        if (g_pocketdb->SelectAggr(reindexer::Query("Comment").Where("block", CondGt, last_height - count).Where("block", CondLe, last_height).Where("last", CondEq, true).Aggregate(AggFacet, {"block"}), "block", aggRes).ok()) {
             for (const auto& f : aggRes.facets) {
-                oComments.emplace(std::stoi(f.value), f.count);
+                oComments.emplace(std::stoi(f.values[0]), f.count);
             }
         }
         rStat.emplace("comments", oComments);

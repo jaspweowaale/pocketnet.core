@@ -6,12 +6,15 @@
 #include <string>
 #include "cpp-btree/btree_set.h"
 #include "estl/h_vector.h"
+#include "estl/intrusive_ptr.h"
+#include "estl/span.h"
 
 namespace reindexer {
 using std::string;
 using std::shared_ptr;
 
 using base_idset = h_vector<IdType, 3>;
+using base_idsetset = btree::btree_set<int>;
 
 class IdSetPlain : protected base_idset {
 public:
@@ -27,9 +30,12 @@ public:
 	using base_idset::shrink_to_fit;
 	using base_idset::back;
 	using base_idset::heap_size;
-
-	iterator begin() { return base_idset::begin(); }
-	iterator end() { return base_idset::end(); }
+	using base_idset::begin;
+	using base_idset::end;
+	using base_idset::rbegin;
+	using base_idset::rend;
+	using base_idset::const_reverse_iterator;
+	using base_idset::const_iterator;
 
 	enum EditMode {
 		Ordered,   // Keep idset ordered, and ready to select (insert is slow O(logN)+O(N))
@@ -58,11 +64,10 @@ public:
 	bool IsCommited() const { return true; }
 	bool IsEmpty() const { return empty(); }
 	size_t BTreeSize() const { return 0; }
+	const base_idsetset *BTree() const { return nullptr; }
 	void ReserveForSorted(int sortedIdxCount) { reserve(size() * (sortedIdxCount + 1)); }
 	string Dump();
 };
-
-using base_idsetset = btree::btree_set<int>;
 
 // maxmimum size of idset without building btree
 const int kMaxPlainIdsetSize = 16;
@@ -71,7 +76,7 @@ class IdSet : public IdSetPlain {
 	friend class SingleSelectKeyResult;
 
 public:
-	typedef shared_ptr<IdSet> Ptr;
+	using Ptr = intrusive_ptr<intrusive_atomic_rc_wrapper<IdSet>>;
 	IdSet() : usingBtree_(false) {}
 	IdSet(const IdSet &other)
 		: IdSetPlain(other), set_(!other.set_ ? nullptr : new base_idsetset(*other.set_)), usingBtree_(other.usingBtree_.load()) {}
@@ -154,9 +159,15 @@ public:
 	bool IsCommited() const { return !usingBtree_; }
 	bool IsEmpty() const { return empty() && (!set_ || set_->empty()); }
 	size_t BTreeSize() const { return set_ ? sizeof(*set_.get()) + set_->size() * sizeof(int) : 0; }
+	const base_idsetset *BTree() const { return set_.get(); }
 	void ReserveForSorted(int sortedIdxCount) { reserve(((set_ ? set_->size() : size())) * (sortedIdxCount + 1)); }
 
 protected:
+	template <typename>
+	friend class BtreeIndexForwardIteratorImpl;
+	template <typename>
+	friend class BtreeIndexReverseIteratorImpl;
+
 	std::unique_ptr<base_idsetset> set_;
 	std::atomic<bool> usingBtree_;
 };

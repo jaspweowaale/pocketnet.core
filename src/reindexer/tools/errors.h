@@ -2,39 +2,47 @@
 
 #include <string>
 #include "core/type_consts.h"
+#include "estl/intrusive_ptr.h"
+#include "estl/string_view.h"
+#include "spdlog/fmt/bundled/printf.h"
+#include "spdlog/fmt/fmt.h"
 
 namespace reindexer {
-
-using std::string;
 
 class Error {
 public:
 	Error(int code = errOK);
-	Error(int code, const string &what);
-	Error(int code, const char *fmt, ...)
-#ifndef _MSC_VER
-		__attribute__((format(printf, 3, 4)))
-#endif
-		;
+	Error(int code, string_view what);
+	template <typename... Args>
+	Error(int code, const char *fmt, const Args &... args) : Error(code, fmt::sprintf(fmt, args...)) {}
 
 	const string &what() const;
 	int code() const;
-	bool ok() const { return code_ == errOK; }
+	bool ok() const { return !ptr_; }
 
-	explicit operator bool() { return code_ != errOK; }
+	explicit operator bool() { return !ok(); }
 
 protected:
-	int code_;
-	string what_;
+	struct payload {
+		payload(int code, const string &what) : code_(code), what_(what){};
+		int code_;
+		std::string what_;
+	};
+	intrusive_ptr<intrusive_atomic_rc_wrapper<payload>> ptr_;
 };
 
 #ifdef NDEBUG
 #define assertf(...) ((void)0)
 #else
-#define assertf(e, fmt, ...)                                                                         \
-	if (!(e)) {                                                                                      \
-		fprintf(stderr, "%s:%d: failed assertion '%s':\n" fmt, __FILE__, __LINE__, #e, __VA_ARGS__); \
-		abort();                                                                                     \
+template <typename... Args>
+void assertf_fmt(const char *fmt, const Args &... args) {
+	fmt::fprintf(std::cerr, fmt, args...);
+}
+
+#define assertf(e, fmt, ...)                                                                     \
+	if (!(e)) {                                                                                  \
+		assertf_fmt("%s:%d: failed assertion '%s':\n" fmt, __FILE__, __LINE__, #e, __VA_ARGS__); \
+		abort();                                                                                 \
 	}
 #endif
 

@@ -2,6 +2,7 @@
 
 #include <vector>
 #include "core/idset.h"
+#include "sort/pdqsort.hpp"
 #include "tools/errors.h"
 
 namespace reindexer {
@@ -23,8 +24,8 @@ public:
 	IdSetT& Unsorted() { return ids_; }
 	const IdSetT& Unsorted() const { return ids_; }
 	IdSetRef Sorted(unsigned sortId) const {
-		assertf(ids_.capacity() >= (sortId + 1) * ids_.size(), "error ids_.capacity()=%d,sortId=%d,ids_.size()=%d", int(ids_.capacity()),
-				int(sortId), int(ids_.size()));
+		assertf(ids_.capacity() >= (sortId + 1) * ids_.size(), "error ids_.capacity()=%d,sortId=%d,ids_.size()=%d", ids_.capacity(), sortId,
+				ids_.size());
 		return IdSetRef(ids_.data() + sortId * ids_.size(), ids_.size());
 	}
 	void UpdateSortedIds(const UpdateSortedContext& ctx) {
@@ -36,10 +37,10 @@ public:
 		size_t idx = 0;
 		// For all ids of current key
 		for (auto rowid : ids_) {
-			assertf(rowid < int(ctx.ids2Sorts().size()), "id=%d,ctx.ids2Sorts().size()=%d", rowid, int(ctx.ids2Sorts().size()));
+			assertf(rowid < int(ctx.ids2Sorts().size()), "id=%d,ctx.ids2Sorts().size()=%d", rowid, ctx.ids2Sorts().size());
 			idsAsc[idx++] = ctx.ids2Sorts()[rowid];
 		}
-		std::sort(idsAsc.begin(), idsAsc.end());
+		boost::sort::pdqsort(idsAsc.begin(), idsAsc.end());
 	}
 
 	IdSetT ids_;

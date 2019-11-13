@@ -25,6 +25,7 @@ public:
 	IndexMemStat GetMemStat() override;
 	Variant Upsert(const Variant& key, IdType id) override final;
 	void Delete(const Variant& key, IdType id) override final;
+	void SetOpts(const IndexOpts& opts) override final;
 
 protected:
 	FtFastConfig* GetConfig() const;
@@ -34,8 +35,6 @@ protected:
 	void BuildVdocs(Data& data);
 
 	void initSearchers();
-
-	const typename T::mapped_type* GetEntry(const void* entry);
 };
 
 Index* FastIndexText_New(const IndexDef& idef, const PayloadType payloadType, const FieldsSet& fields);

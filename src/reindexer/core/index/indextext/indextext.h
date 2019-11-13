@@ -6,19 +6,13 @@
 #include "core/ft/ft_fuzzy/searchers/isearcher.h"
 #include "core/ft/ftdsl.h"
 #include "core/ft/ftsetcashe.h"
-#include "core/ft/idrelset.h"
-#include "core/ft/stemmer.h"
 #include "core/index/indexunordered.h"
 #include "core/selectfunc/ctx/ftctx.h"
 #include "estl/fast_hash_map.h"
-#include "estl/flat_str_map.h"
 #include "estl/shared_mutex.h"
 #include "fieldsgetter.h"
 
-//#define REINDEX_FT_EXTRA_DEBUG 1
-
 namespace reindexer {
-using std::pair;
 using std::unique_ptr;
 
 template <typename T>
@@ -31,24 +25,26 @@ public:
 		initSearchers();
 	}
 
-	SelectKeyResults SelectKey(const VariantArray& keys, CondType condition, SortType stype, Index::ResultType res_type,
-							   BaseFunctionCtx::Ptr ctx) override final;
+	SelectKeyResults SelectKey(const VariantArray& keys, CondType condition, SortType stype, Index::SelectOpts opts,
+							   BaseFunctionCtx::Ptr ctx, const RdxContext&) override final;
 	void UpdateSortedIds(const UpdateSortedContext&) override {}
 	virtual IdSet::Ptr Select(FtCtx::Ptr fctx, FtDSLQuery& dsl) = 0;
-	void SetOpts(const IndexOpts& opts) override final;
+	void SetOpts(const IndexOpts& opts) override;
 	void Commit() override final;
 	virtual void commitFulltext() = 0;
 	void SetSortedIdxCount(int) override final{};
 
 protected:
+	using Mutex = MarkedMutex<shared_timed_mutex, MutexMark::IndexText>;
+
 	void initSearchers();
-	FieldsGetter<T> Getter();
+	FieldsGetter Getter();
 
 	shared_ptr<FtIdSetCache> cache_ft_;
 	fast_hash_map<string, int> ftFields_;
 	unique_ptr<BaseFTConfig> cfg_;
 	DataHolder holder_;
-	shared_timed_mutex mtx_;
+	Mutex mtx_;
 	bool isBuilt_;
 };
 

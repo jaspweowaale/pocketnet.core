@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <mutex>
 #include <vector>
-#include "h_vector.h"
+#include "span.h"
 #include "string_view.h"
 
 namespace reindexer {
@@ -45,6 +45,7 @@ public:
 			if (data_) {
 				memcpy(newdata, data_, len_);
 			}
+			delete data_;
 			data_ = newdata;
 		}
 		memcpy(data_ + len_, data.data(), data.size());
@@ -69,8 +70,7 @@ public:
 			ring_[head_] = std::move(ch);
 			head_ = (head_ + 1) % ring_.size();
 			assert(head_ != tail_);
-		} else
-			std::move(ch);
+		}
 	}
 	void write(string_view sv) {
 		chunk chunk = get_chunk();
@@ -97,7 +97,7 @@ public:
 			if (free_.size() < ring_.size() && cur.cap_ < 0x10000)
 				free_.push_back(std::move(cur));
 			else
-				std::move(cur);
+				cur = chunk();
 			tail_ = (tail_ + 1) % ring_.size();
 		}
 	}
@@ -114,6 +114,11 @@ public:
 	unsigned size() {
 		std::unique_lock<Mutex> lck(mtx_);
 		return (head_ - tail_ + ring_.size()) % ring_.size();
+	}
+
+	unsigned capacity() {
+		std::unique_lock<Mutex> lck(mtx_);
+		return ring_.size() - 1;
 	}
 	void clear() {
 		std::unique_lock<Mutex> lck(mtx_);

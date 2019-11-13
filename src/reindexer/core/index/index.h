@@ -11,19 +11,23 @@
 #include "core/perfstatcounter.h"
 #include "core/selectfunc/ctx/basefunctionctx.h"
 #include "core/selectkeyresult.h"
+#include "indexiterator.h"
 
 namespace reindexer {
 
 using std::string;
 using std::vector;
 
+class RdxContext;
+
 class Index {
 public:
-	enum ResultType {
-		Optimal = 0,
-		ForceIdset = 1,
-		ForceComparator = 2,
-		DisableIdSetCache = 4,
+	struct SelectOpts {
+		SelectOpts() : distinct(0), disableIdSetCache(0), forceComparator(0), unbuiltSortOrders(0) {}
+		unsigned distinct : 1;
+		unsigned disableIdSetCache : 1;
+		unsigned forceComparator : 1;
+		unsigned unbuiltSortOrders : 1;
 	};
 	using KeyEntry = reindexer::KeyEntry<IdSet>;
 	using KeyEntryPlain = reindexer::KeyEntry<IdSetPlain>;
@@ -34,11 +38,9 @@ public:
 	virtual ~Index();
 	virtual Variant Upsert(const Variant& key, IdType id) = 0;
 	virtual void Delete(const Variant& key, IdType id) = 0;
-	virtual void DumpKeys() = 0;
-	virtual IdSetRef Find(const Variant& key) = 0;
 
-	virtual SelectKeyResults SelectKey(const VariantArray& keys, CondType condition, SortType stype, ResultType res_type,
-									   BaseFunctionCtx::Ptr ctx) = 0;
+	virtual SelectKeyResults SelectKey(const VariantArray& keys, CondType condition, SortType stype, SelectOpts opts,
+									   BaseFunctionCtx::Ptr ctx, const RdxContext&) = 0;
 	virtual void Commit() = 0;
 	virtual void MakeSortOrders(UpdateSortedContext&) {}
 
@@ -47,6 +49,10 @@ public:
 	virtual Index* Clone() = 0;
 	virtual bool IsOrdered() const { return false; }
 	virtual IndexMemStat GetMemStat() = 0;
+	virtual int64_t GetTTLValue() const { return 0; }
+	virtual IndexIterator::Ptr CreateIterator() const { return nullptr; }
+
+	const PayloadType& GetPayloadType() const { return payloadType_; }
 	void UpdatePayloadType(const PayloadType payloadType) { payloadType_ = payloadType; }
 
 	static Index* New(const IndexDef& idef, const PayloadType payloadType, const FieldsSet& fields_);
@@ -63,11 +69,15 @@ public:
 	SortType SortId() const { return sortId_; }
 	virtual void SetSortedIdxCount(int sortedIdxCount) { sortedIdxCount_ = sortedIdxCount; }
 
-	PerfStatCounterST& GetSelectPerfCounter() { return selectPerfCounter_; }
-	PerfStatCounterST& GetCommitPerfCounter() { return commitPerfCounter_; }
+	PerfStatCounterMT& GetSelectPerfCounter() { return selectPerfCounter_; }
+	PerfStatCounterMT& GetCommitPerfCounter() { return commitPerfCounter_; }
 
 	IndexPerfStat GetIndexPerfStat() {
 		return IndexPerfStat(name_, selectPerfCounter_.Get<PerfStat>(), commitPerfCounter_.Get<PerfStat>());
+	}
+	void ResetIndexPerfStat() {
+		selectPerfCounter_.Reset();
+		commitPerfCounter_.Reset();
 	}
 
 protected:
@@ -86,8 +96,8 @@ protected:
 	// Fields in index. Valid only for composite indexes
 	FieldsSet fields_;
 	// Perfstat counter
-	PerfStatCounterST commitPerfCounter_;
-	PerfStatCounterST selectPerfCounter_;
+	PerfStatCounterMT commitPerfCounter_;
+	PerfStatCounterMT selectPerfCounter_;
 	KeyValueType keyType_, selectKeyType_;
 	// Count of sorted indexes in namespace to resereve additional space in idsets
 	int sortedIdxCount_ = 0;

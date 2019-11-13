@@ -1,29 +1,76 @@
 #pragma once
-#include <chrono>
-#include <functional>
 #include "core/aggregator.h"
 #include "core/index/index.h"
-#include "core/nsselecter/selectiterator.h"
-#include "core/query/query.h"
-#include "core/query/queryresults.h"
-#include "core/selectfunc/ctx/basefunctionctx.h"
-#include "core/selectfunc/ctx/ftctx.h"
-#include "core/selectfunc/selectfunc.h"
+#include "core/joincache.h"
+#include "core/nsselecter/selectiteratorcontainer.h"
+#include "sortingcontext.h"
 
 namespace reindexer {
 
-using std::string;
-using std::vector;
-using std::chrono::duration_cast;
-using std::chrono::microseconds;
+struct JoinPreResult {
+	enum Mode { ModeBuild, ModeIterators, ModeIdSet, ModeEmpty };
 
-struct JoinedSelector {
-	typedef std::function<bool(IdType, int nsId, ConstPayload, bool)> FuncType;
-	JoinType type;
-	bool nodata;
-	FuncType func;
-	int called, matched;
-	string ns;
+	typedef shared_ptr<JoinPreResult> Ptr;
+	IdSet ids;
+	SelectIteratorContainer iterators;
+	Mode mode = ModeEmpty;
+	bool enableSortOrders = false;
+	bool btreeIndexOptimizationEnabled = true;
+};
+
+class JoinedSelector {
+public:
+	JoinedSelector(JoinType joinType, std::shared_ptr<Namespace> leftNs, std::shared_ptr<Namespace> rightNs, JoinCacheRes &&joinRes,
+				   Query &&itemQuery, QueryResults &result, const JoinedQuery &joinQuery, JoinPreResult::Ptr preResult,
+				   size_t joinedFieldIdx, SelectFunctionsHolder &selectFunctions, int joinedSelectorsCount, const RdxContext &rdxCtx)
+		: joinType_(joinType),
+		  called_(0),
+		  matched_(0),
+		  leftNs_(std::move(leftNs)),
+		  rightNs_(std::move(rightNs)),
+		  joinRes_(std::move(joinRes)),
+		  itemQuery_(std::move(itemQuery)),
+		  result_(result),
+		  joinQuery_(joinQuery),
+		  preResult_(preResult),
+		  joinedFieldIdx_(joinedFieldIdx),
+		  selectFunctions_(selectFunctions),
+		  joinedSelectorsCount_(joinedSelectorsCount),
+		  rdxCtx_(rdxCtx),
+		  optimized_(false) {}
+
+	JoinedSelector(JoinedSelector &&) = default;
+
+	JoinedSelector(const JoinedSelector &) = delete;
+	JoinedSelector &operator=(const JoinedSelector &) = delete;
+	JoinedSelector &operator=(JoinedSelector &&) = delete;
+
+	bool Process(IdType, int nsId, ConstPayload, bool match);
+	JoinType Type() const { return joinType_; }
+	const Namespace &RightNs() const { return *rightNs_; }
+	int Called() const { return called_; }
+	int Matched() const { return matched_; }
+	void AppendSelectIteratorOfJoinIndexData(SelectIteratorContainer &, int *maxIterations, unsigned sortId, SelectFunction::Ptr,
+											 const RdxContext &);
+
+private:
+	template <bool byJsonPath>
+	void readValues(VariantArray &values, const Index &leftIndex, int rightIdxNo, const std::string &rightIndex) const;
+
+	JoinType joinType_;
+	int called_, matched_;
+	std::shared_ptr<Namespace> leftNs_;
+	std::shared_ptr<Namespace> rightNs_;
+	JoinCacheRes joinRes_;
+	Query itemQuery_;
+	QueryResults &result_;
+	const JoinedQuery &joinQuery_;
+	JoinPreResult::Ptr preResult_;
+	size_t joinedFieldIdx_;
+	SelectFunctionsHolder &selectFunctions_;
+	int joinedSelectorsCount_;
+	const RdxContext &rdxCtx_;
+	bool optimized_;
 };
 
 typedef vector<JoinedSelector> JoinedSelectors;
@@ -32,78 +79,55 @@ struct SelectCtx {
 	explicit SelectCtx(const Query &query_) : query(query_) {}
 	const Query &query;
 	JoinedSelectors *joinedSelectors = nullptr;
-
 	SelectFunctionsHolder *functions = nullptr;
-	struct PreResult {
-		enum Mode { ModeBuild, ModeIterators, ModeIdSet, ModeEmpty };
 
-		typedef shared_ptr<PreResult> Ptr;
-		IdSet ids;
-		h_vector<SelectIterator, 0> iterators;
-		Mode mode = ModeEmpty;
-		bool enableSortOrders = false;
-	};
-	struct SortingCtx {
-		struct Entry {
-			const SortingEntry *data = nullptr;
-			Index *index = nullptr;
-			const CollateOpts *opts = nullptr;
-		};
-		h_vector<Entry, 1> entries;
-		Index *sortIndex() { return entries.empty() ? nullptr : entries[0].index; }
-		int sortId() { return sortIndex() ? sortIndex()->SortId() : 0; }
-	};
-	PreResult::Ptr preResult;
-	SortingCtx sortingCtx;
+	JoinPreResult::Ptr preResult;
+	SortingContext sortingContext;
 	uint8_t nsid = 0;
 	bool isForceAll = false;
 	bool skipIndexesLookup = false;
 	bool matchedAtLeastOnce = false;
 	bool reqMatchedOnceFlag = false;
-	bool enableSortOrders = false;
+	bool contextCollectingMode = false;
 };
 
 class NsSelecter {
 public:
 	NsSelecter(Namespace *parent) : ns_(parent) {}
-	struct RawQueryResult : public h_vector<SelectIterator> {};
 
-	void operator()(QueryResults &result, SelectCtx &ctx);
+	void operator()(QueryResults &result, SelectCtx &ctx, const RdxContext &);
 
 private:
 	struct LoopCtx {
 		LoopCtx(SelectCtx &ctx) : sctx(ctx) {}
-		RawQueryResult *qres = nullptr;
+		SelectIteratorContainer *qres = nullptr;
 		bool calcTotal = false;
 		SelectCtx &sctx;
 	};
 
-	template <bool reverse, bool haveComparators, bool haveDistinct>
-	void selectLoop(LoopCtx &ctx, QueryResults &result);
-	void applyCustomSort(ItemRefVector &result, const SelectCtx &ctx);
+	template <bool reverse, bool haveComparators>
+	void selectLoop(LoopCtx &ctx, QueryResults &result, const RdxContext &);
+	void applyForcedSort(ItemRefVector &result, const SelectCtx &ctx);
+	void applyForcedSortDesc(ItemRefVector &result, const SelectCtx &ctx);
 
 	using ItemIterator = ItemRefVector::iterator;
 	using ConstItemIterator = const ItemIterator &;
 	void applyGeneralSort(ConstItemIterator itFirst, ConstItemIterator itLast, ConstItemIterator itEnd, const SelectCtx &ctx);
 
-	bool containsFullTextIndexes(const QueryEntries &entries);
-	void prepareIteratorsForSelectLoop(const QueryEntries &entries, RawQueryResult &result, SortType sortId, bool is_ft);
-	void prepareEqualPositionComparator(const Query &query, const QueryEntries &entries, RawQueryResult &result);
 	void addSelectResult(uint8_t proc, IdType rowId, IdType properRowId, const SelectCtx &sctx, h_vector<Aggregator, 4> &aggregators,
 						 QueryResults &result);
-	QueryEntries lookupQueryIndexes(const QueryEntries &entries);
-	void convertWhereValues(QueryEntries &entries);
-	void substituteCompositeIndexes(QueryEntries &entries);
-	SortingEntries detectOptimalSortOrder(const QueryEntries &entries);
+
 	h_vector<Aggregator, 4> getAggregators(const Query &q);
 	int getCompositeIndex(const FieldsSet &fieldsmask);
-	bool mergeQueryEntries(QueryEntry *lhs, QueryEntry *rhs);
 	void setLimitAndOffset(ItemRefVector &result, size_t offset, size_t limit);
-	KeyValueType detectQueryEntryIndexType(const QueryEntry &qentry) const;
 	void prepareSortingContext(const SortingEntries &sortBy, SelectCtx &ctx, bool isFt);
 	void prepareSortingIndexes(SortingEntries &sortBy);
-	void getSortIndexValue(const SelectCtx::SortingCtx::Entry *sortCtx, IdType rowId, VariantArray &value);
-	bool proccessJoin(SelectCtx &sctx, IdType properRowId, bool found, bool match, bool hasInnerJoin);
+	void getSortIndexValue(const SortingContext::Entry *sortCtx, IdType rowId, VariantArray &value);
+	void processLeftJoins(QueryResults &qr, SelectCtx &sctx);
+	bool checkIfThereAreLeftJoins(SelectCtx &sctx) const;
+	void sortResults(reindexer::SelectCtx &sctx, QueryResults &result, const SortingOptions &sortingOptions, size_t multisortLimitLeft);
+
+	bool isSortOptimizatonEffective(const QueryEntries &qe, SelectCtx &ctx, const RdxContext &rdxCtx);
 
 	Namespace *ns_;
 	SelectFunction::Ptr fnc_;

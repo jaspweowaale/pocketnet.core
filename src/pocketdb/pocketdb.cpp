@@ -506,7 +506,7 @@ Error PocketDB::SelectAggr(Query query, std::string aggId, AggregationResult& ag
     if (err.ok()) {
         if (res.aggregationResults.size() > 0) {
             aggRes = std::find_if(res.aggregationResults.begin(), res.aggregationResults.end(),
-                [&](const reindexer::AggregationResult& agg) { return agg.name == aggId; })[0];
+                [&](const reindexer::AggregationResult& agg) { return agg.fields[0] == aggId; })[0];
         } else {
             return Error(13);
         }
@@ -610,7 +610,7 @@ void PocketDB::GetUserBalance(std::string _address, int height, int64_t& balance
         .Where("address", CondEq, _address)
         .Where("block", CondLt, height)
         .Where("spent_block", CondEq, 0)
-        .Aggregate("amount", AggSum)
+        .Aggregate(AggSum, {"amount"})
         ,"amount"
         ,aggRes
     ).ok()) {

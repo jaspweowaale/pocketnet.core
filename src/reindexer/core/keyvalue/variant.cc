@@ -7,7 +7,8 @@
 #include "tools/serializer.h"
 #include "tools/stringstools.h"
 #include "utf8cpp/utf8.h"
-#include "variant.h"
+#include "vendor/atoi/atoi.h"
+#include "vendor/double-conversion/double-conversion.h"
 
 namespace reindexer {
 
@@ -112,7 +113,7 @@ string Variant::As<string>() const {
 			auto va = getCompositeValues();
 			WrSerializer wrser;
 			va.Dump(wrser);
-			return wrser.Slice().ToString();
+			return string(wrser.Slice());
 		}
 		default:
 			abort();
@@ -132,12 +133,7 @@ int Variant::As<int>() const {
 			case KeyValueDouble:
 				return int(value_double);
 			case KeyValueString: {
-				size_t idx = 0;
-				auto res = std::stoi(operator p_string().data(), &idx);
-				if (idx != operator p_string().length()) {
-					throw std::exception();
-				}
-				return res;
+				return stoi(operator p_string());
 			}
 			case KeyValueComposite:
 			case KeyValueTuple:
@@ -146,7 +142,7 @@ int Variant::As<int>() const {
 				abort();
 		}
 	} catch (...) {
-		throw Error(errParams, "Can't convert %s to number\n", operator p_string().data());
+		throw Error(errParams, "Can't convert %s to number", operator p_string().data());
 	}
 }
 
@@ -171,7 +167,7 @@ bool Variant::As<bool>() const {
 				abort();
 		}
 	} catch (...) {
-		throw Error(errParams, "Can't convert %s to bool\n", operator p_string().data());
+		throw Error(errParams, "Can't convert %s to bool", operator p_string().data());
 	}
 }
 
@@ -203,7 +199,7 @@ int64_t Variant::As<int64_t>() const {
 				abort();
 		}
 	} catch (...) {
-		throw Error(errParams, "Can't convert %s to number\n", operator p_string().data());
+		throw Error(errParams, "Can't convert %s to number", operator p_string().data());
 	}
 }
 
@@ -228,7 +224,7 @@ double Variant::As<double>() const {
 				abort();
 		}
 	} catch (...) {
-		throw Error(errParams, "Can't convert %s to number\n", operator p_string().data());
+		throw Error(errParams, "Can't convert %s to number", operator p_string().data());
 	}
 }
 
@@ -249,6 +245,50 @@ int Variant::Compare(const Variant &other, const CollateOpts &collateOpts) const
 			return collateCompare(operator p_string(), other.operator p_string(), collateOpts);
 		default:
 			abort();
+	}
+}
+
+int Variant::relaxCompareWithString(string_view str) const {
+	switch (Type()) {
+		case KeyValueInt: {
+			bool valid = true;
+			const int res = jsteemann::atoi<int>(str.data(), str.data() + str.size(), valid);
+			if (!valid) return -1;
+			return (value_int == res) ? 0 : ((value_int > res) ? 1 : -1);
+		}
+		case KeyValueInt64: {
+			bool valid = true;
+			const int64_t res = jsteemann::atoi<int64_t>(str.data(), str.data() + str.size(), valid);
+			if (!valid) return -1;
+			return (value_int64 == res) ? 0 : ((value_int64 > res) ? 1 : -1);
+		}
+		case KeyValueDouble: {
+			const int flags = double_conversion::StringToDoubleConverter::NO_FLAGS;
+			const double_conversion::StringToDoubleConverter conv(flags, NAN, NAN, nullptr, nullptr);
+			int count;
+			const double res = conv.StringToDouble(str.data(), str.size(), &count);
+			if (std::isnan(res)) return -1;
+			return (value_double == res) ? 0 : ((value_double > res) ? 1 : -1);
+		}
+		default: {
+			throw Error(errParams, "Not comparable types");
+		}
+	}
+}
+
+int Variant::RelaxCompare(const Variant &other, const CollateOpts &collateOpts) const {
+	if (Type() == other.Type()) return Compare(other, collateOpts);
+	if (Type() == KeyValueString) {
+		return relaxCompareWithString(static_cast<p_string>(other));
+	} else if (other.Type() == KeyValueString) {
+		return -other.relaxCompareWithString(static_cast<p_string>(*this));
+	} else if ((Type() == KeyValueInt || Type() == KeyValueInt64 || Type() == KeyValueDouble) &&
+			   (other.Type() == KeyValueInt || other.Type() == KeyValueInt64 || other.Type() == KeyValueDouble)) {
+		const int64_t lhs = As<int64_t>();
+		const int64_t rhs = other.As<int64_t>();
+		return (lhs == rhs) ? 0 : ((lhs > rhs) ? 1 : -1);
+	} else {
+		throw Error(errParams, "Not comparable types");
 	}
 }
 
@@ -275,6 +315,14 @@ void Variant::EnsureUTF8() const {
 			throw Error(errParams, "Invalid UTF8 string passed to index with CollateUTF8 mode");
 		}
 	}
+}
+
+Variant Variant::convert(KeyValueType type, const PayloadType *payloadType, const FieldsSet *fields) const {
+	if (type_ != type) {
+		Variant dst(*this);
+		return dst.convert(type, payloadType, fields);
+	}
+	return *this;
 }
 
 Variant &Variant::convert(KeyValueType type, const PayloadType *payloadType, const FieldsSet *fields) {
@@ -305,6 +353,7 @@ Variant &Variant::convert(KeyValueType type, const PayloadType *payloadType, con
 		default:
 			throw Error(errParams, "Can't convert Variant from type '%s' to to type '%s'", TypeName(type_), TypeName(type));
 	}
+
 	type_ = type;
 	return *this;
 }
@@ -328,12 +377,12 @@ void Variant::convertToComposite(const PayloadType *payloadType, const FieldsSet
 
 	size_t count = ser.GetVarUint();
 	if (count != fields->size()) {
-		throw Error(errLogic, "Invalid count of arguments for composite index, expected %d, got %d", int(fields->size()), int(count));
+		throw Error(errLogic, "Invalid count of arguments for composite index, expected %d, got %d", fields->size(), count);
 	}
 
 	Payload pl(*payloadType, pv);
 
-	for (auto &field : *fields) {
+	for (auto field : *fields) {
 		if (field != IndexValueType::SetByJsonPath) {
 			pl.Set(field, {ser.GetVariant()});
 		} else {
@@ -402,49 +451,40 @@ Variant::operator const PayloadValue &() const {
 	return *cast<PayloadValue>();
 }
 
-static bool isPrintable(p_string str) {
-	if (str.length() > 256) {
-		return false;
-	}
-
-	for (int i = 0; i < int(str.length()); i++) {
-		if (unsigned(str.data()[i]) < 0x20) {
-			return false;
+void Variant::Dump(WrSerializer &wrser) const {
+	switch (Type()) {
+		case KeyValueString: {
+			p_string str(*this);
+			if (isPrintable(str)) {
+				wrser << '\'' << string_view(str) << '\'';
+			} else {
+				wrser << "slice{len:" << str.length() << "}";
+			}
+			break;
 		}
+		case KeyValueInt:
+			wrser << operator int();
+			break;
+		case KeyValueBool:
+			wrser << operator bool();
+			break;
+		case KeyValueInt64:
+			wrser << operator int64_t();
+			break;
+		case KeyValueDouble:
+			wrser << operator double();
+			break;
+		default:
+			wrser << "??";
+			break;
 	}
-	return true;
 }
 
 void VariantArray::Dump(WrSerializer &wrser) const {
 	wrser << '{';
-
 	for (auto &arg : *this) {
-		if (&arg != &at(0)) {
-			wrser << ", ";
-		}
-		switch (arg.Type()) {
-			case KeyValueString: {
-				p_string str(arg);
-				if (isPrintable(str)) {
-					wrser << '\'' << string_view(str) << '\'';
-				} else {
-					wrser << "slice{len:" << str.length() << "}";
-				}
-				break;
-			}
-			case KeyValueInt:
-				wrser << int(arg);
-				break;
-			case KeyValueBool:
-				wrser << bool(arg);
-				break;
-			case KeyValueInt64:
-				wrser << int64_t(arg);
-				break;
-			default:
-				wrser << "??";
-				break;
-		}
+		if (&arg != &at(0)) wrser << ", ";
+		arg.Dump(wrser);
 	}
 	wrser << '}';
 }

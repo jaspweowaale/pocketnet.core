@@ -5,6 +5,8 @@
 #include <mutex>
 #include <string>
 #include <vector>
+#include "estl/span.h"
+#include "tools/errors.h"
 
 namespace reindexer {
 
@@ -33,13 +35,43 @@ struct IndexMemStat {
 	LRUCacheMemStat idsetCache;
 };
 
+struct ReplicationState {
+	void GetJSON(JsonBuilder &builder);
+	void FromJSON(span<char>);
+
+	// LSN of last change
+	int64_t lastLsn = -1;
+	// Slave mode flag
+	bool slaveMode = false;
+	// Temporary namespace flag
+	bool temporary = false;
+	// Replication error
+	Error replError = errOK;
+	// Cluster ID
+	int clusterID = -1;
+	// Incarnation counter
+	int incarnationCounter = 0;
+	// Data hash
+	uint64_t dataHash = 0;
+	// Data count
+	int dataCount = 0;
+	// Data updated
+	uint64_t updatedUnixNano = 0;
+};
+
+struct ReplicationStat : public ReplicationState {
+	void GetJSON(JsonBuilder &builder);
+	size_t walCount = 0;
+	size_t walSize = 0;
+};
+
 struct NamespaceMemStat {
 	void GetJSON(WrSerializer &ser);
 
 	std::string name;
 	std::string storagePath;
 	bool storageOK = false;
-	unsigned long long updatedUnixNano = 0;
+	bool storageLoaded = true;
 	size_t itemsCount = 0;
 	size_t emptyItemsCount = 0;
 	size_t dataSize = 0;
@@ -48,6 +80,7 @@ struct NamespaceMemStat {
 		size_t indexesSize = 0;
 		size_t cacheSize = 0;
 	} Total;
+	ReplicationStat replication;
 	LRUCacheMemStat joinCache;
 	LRUCacheMemStat queryCache;
 	std::vector<IndexMemStat> indexes;
@@ -61,6 +94,9 @@ struct PerfStat {
 	size_t avgHitCount;
 	size_t avgTimeUs;
 	size_t avgLockTimeUs;
+	double stddev;
+	size_t minTimeUs;
+	size_t maxTimeUs;
 };
 
 struct IndexPerfStat {

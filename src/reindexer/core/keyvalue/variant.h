@@ -101,6 +101,7 @@ public:
 	bool operator>=(const Variant &other) const { return Compare(other) >= 0; }
 
 	int Compare(const Variant &other, const CollateOpts &collateOpts = CollateOpts()) const;
+	int RelaxCompare(const Variant &other, const CollateOpts &collateOpts = CollateOpts()) const;
 	size_t Hash() const;
 	void EnsureUTF8() const;
 	Variant &EnsureHold();
@@ -109,7 +110,10 @@ public:
 	static const char *TypeName(KeyValueType t);
 
 	Variant &convert(KeyValueType type, const PayloadType * = nullptr, const FieldsSet * = nullptr);
+	Variant convert(KeyValueType type, const PayloadType * = nullptr, const FieldsSet * = nullptr) const;
 	VariantArray getCompositeValues() const;
+
+	void Dump(WrSerializer &wrser) const;
 
 protected:
 	void convertToComposite(const PayloadType *, const FieldsSet *);
@@ -137,6 +141,7 @@ protected:
 		// PayloadValue value_composite;
 		// key_string h_value_string;
 	};
+	int relaxCompareWithString(string_view) const;
 };  // namespace reindexer
 
 class VariantArray : public h_vector<Variant, 2> {
@@ -146,7 +151,7 @@ public:
 	using h_vector<Variant, 2>::operator!=;
 	size_t Hash() const {
 		size_t ret = this->size();
-		for (size_t i = 0; i < this->size(); ++i) ret ^= this->at(i).Hash();
+		for (size_t i = 0; i < this->size(); ++i) ret = (ret * 127) ^ this->at(i).Hash();
 		return ret;
 	}
 	void Dump(WrSerializer &wrser) const;

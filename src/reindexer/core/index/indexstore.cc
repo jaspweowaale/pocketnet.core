@@ -1,30 +1,24 @@
 
 #include "indexstore.h"
+#include "core/rdxcontext.h"
 #include "tools/errors.h"
 #include "tools/logger.h"
 
 namespace reindexer {
 
-// special implementation for string: avoid allocation string for *_map::find
-// !!!! Not thread safe. Do not use this in Select
-template <>
-unordered_str_map<int>::iterator IndexStore<key_string>::find(const Variant &key) {
-	p_string skey = static_cast<p_string>(key);
-	tmpKeyVal_->assign(skey.data(), skey.length());
-	return str_map.find(tmpKeyVal_);
-}
-
-template <typename T>
-unordered_str_map<int>::iterator IndexStore<T>::find(const Variant & /*key*/) {
-	return str_map.end();
-}
-
 template <>
 void IndexStore<key_string>::Delete(const Variant &key, IdType id) {
 	if (key.Type() == KeyValueNull) return;
-	auto keyIt = find(key);
-	assertf(keyIt != str_map.end(), "Delete unexists key from index '%s' id=%d", name_.c_str(), id);
+	auto keyIt = str_map.find(string_view(key));
+	// assertf(keyIt != str_map.end(), "Delete unexists key from index '%s' id=%d", name_, id);
+	if (keyIt == str_map.end()) return;
 	if (keyIt->second) keyIt->second--;
+	if (!keyIt->second) {
+		memStat_.dataSize -= sizeof(unordered_str_map<int>::value_type) + sizeof(*keyIt->first.get()) + keyIt->first->heap_size();
+		keyIt->first = key_string();
+		str_map.erase(keyIt);
+	}
+
 	(void)id;
 }
 template <typename T>
@@ -34,10 +28,13 @@ template <>
 Variant IndexStore<key_string>::Upsert(const Variant &key, IdType /*id*/) {
 	if (key.Type() == KeyValueNull) return Variant();
 
-	auto keyIt = find(key);
-	if (keyIt == str_map.end()) keyIt = str_map.emplace(static_cast<key_string>(key), 0).first;
-
+	auto keyIt = str_map.find(string_view(key));
+	if (keyIt == str_map.end()) {
+		keyIt = str_map.emplace(static_cast<key_string>(key), 0).first;
+		memStat_.dataSize += sizeof(unordered_str_map<int>::value_type) + sizeof(*keyIt->first.get()) + keyIt->first->heap_size();
+	}
 	keyIt->second++;
+
 	return Variant(keyIt->first);
 }
 
@@ -48,7 +45,7 @@ Variant IndexStore<PayloadValue>::Upsert(const Variant &key, IdType /*id*/) {
 
 template <typename T>
 Variant IndexStore<T>::Upsert(const Variant &key, IdType id) {
-	if (!opts_.IsArray() && !opts_.IsDense()) {
+	if (!opts_.IsArray() && !opts_.IsDense() && !opts_.IsSparse() && key.Type() != KeyValueNull) {
 		idx_data.resize(std::max(id + 1, int(idx_data.size())));
 		idx_data[id] = static_cast<T>(key);
 	}
@@ -57,22 +54,21 @@ Variant IndexStore<T>::Upsert(const Variant &key, IdType id) {
 
 template <typename T>
 void IndexStore<T>::Commit() {
-	logPrintf(LogTrace, "IndexStore::Commit (%s) %d uniq strings", name_.c_str(), int(str_map.size()));
-	for (auto keyIt = str_map.begin(); keyIt != str_map.end();) {
-		if (!keyIt->second) {
-			keyIt = str_map.erase(keyIt);
-		} else {
-			keyIt++;
-		}
-	}
-	if (!str_map.size()) str_map.clear();
+	logPrintf(LogTrace, "IndexStore::Commit (%s) %d uniq strings", name_, str_map.size());
 }
 
 template <typename T>
-SelectKeyResults IndexStore<T>::SelectKey(const VariantArray &keys, CondType condition, SortType /*sortId*/, ResultType res_type,
-										  BaseFunctionCtx::Ptr /*ctx*/) {
+SelectKeyResults IndexStore<T>::SelectKey(const VariantArray &keys, CondType condition, SortType /*sortId*/, Index::SelectOpts sopts,
+										  BaseFunctionCtx::Ptr /*ctx*/, const RdxContext &rdxCtx) {
+	const auto indexWard(rdxCtx.BeforeIndexWork());
 	SelectKeyResult res;
-	res.comparators_.push_back(Comparator(condition, KeyType(), keys, opts_.IsArray(), res_type == Index::ForceIdset, payloadType_, fields_,
+	if (condition == CondEmpty && !this->opts_.IsArray() && !this->opts_.IsSparse())
+		throw Error(errParams, "The 'is NULL' condition is suported only by 'sparse' or 'array' indexes");
+
+	if (condition == CondAny && !this->opts_.IsArray() && !this->opts_.IsSparse() && !sopts.distinct)
+		throw Error(errParams, "The 'NOT NULL' condition is suported only by 'sparse' or 'array' indexes");
+
+	res.comparators_.push_back(Comparator(condition, KeyType(), keys, opts_.IsArray(), sopts.distinct, payloadType_, fields_,
 										  idx_data.size() ? idx_data.data() : nullptr, opts_.collateOpts_));
 	return SelectKeyResults(res);
 }
@@ -84,13 +80,10 @@ Index *IndexStore<T>::Clone() {
 
 template <typename T>
 IndexMemStat IndexStore<T>::GetMemStat() {
-	IndexMemStat ret;
+	IndexMemStat ret = memStat_;
 	ret.name = name_;
 	ret.uniqKeysCount = str_map.size();
 	ret.columnSize = idx_data.size() * sizeof(T);
-	for (auto &it : str_map) {
-		ret.dataSize += sizeof(*it.first.get()) + it.first->heap_size();
-	}
 	return ret;
 }
 

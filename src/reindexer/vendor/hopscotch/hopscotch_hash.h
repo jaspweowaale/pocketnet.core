@@ -572,6 +572,7 @@ public:
 		using value_type = typename hopscotch_hash::value_type;
 		using difference_type = std::ptrdiff_t;
 		using reference = value_type&;
+		using const_reference = const value_type&;
 		using pointer = value_type*;
 		using const_pointer = const value_type*;
 
@@ -581,6 +582,15 @@ public:
 			: m_buckets_iterator(other.m_buckets_iterator),
 			  m_buckets_end_iterator(other.m_buckets_end_iterator),
 			  m_overflow_iterator(other.m_overflow_iterator) {}
+
+		hopscotch_iterator& operator=(const hopscotch_iterator<false>& other) noexcept {
+			if (&other != this) {
+				m_buckets_iterator = other.m_buckets_iterator;
+				m_buckets_end_iterator = other.m_buckets_end_iterator;
+				m_overflow_iterator = other.m_overflow_iterator;
+			}
+			return *this;
+		}
 
 		const typename hopscotch_hash::key_type& key() const {
 			if (m_buckets_iterator != m_buckets_end_iterator) {
@@ -599,7 +609,17 @@ public:
 			return m_overflow_iterator->second;
 		}
 
-		reference operator*() const {
+		template <bool const_val = is_const>
+		typename std::enable_if<!const_val, reference>::type operator*() {
+			if (m_buckets_iterator != m_buckets_end_iterator) {
+				return m_buckets_iterator->get_value();
+			}
+
+			return *m_overflow_iterator;
+		}
+
+		template <bool const_val = is_const>
+		typename std::enable_if<const_val, const_reference>::type operator*() const {
 			if (m_buckets_iterator != m_buckets_end_iterator) {
 				return m_buckets_iterator->get_value();
 			}

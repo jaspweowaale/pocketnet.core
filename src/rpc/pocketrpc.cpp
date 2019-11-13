@@ -70,13 +70,13 @@ UniValue getcomments(const JSONRPCRequest& request)
     UniValue aResult(UniValue::VARR);
     for (auto& it : commRes) {
         reindexer::Item cmntItm = it.GetItem();
-        reindexer::Item ocmntItm = it.GetJoined()[0][0].GetItem();
+        reindexer::Item ocmntItm = it.GetJoinedItemsIterator().begin().ToQueryResults()[0].GetItem();
         
         int myScore = 0;
-        if (it.GetJoined().size() > 1 &&it.GetJoined()[1].Count() > 0) {
+        /*if (it.GetJoinedItemsIterator(). > 1 && it.GetJoined()[1].Count() > 0) {
             reindexer::Item ocmntScoreItm = it.GetJoined()[1][0].GetItem();
             myScore = ocmntScoreItm["value"].As<int>();
-        }
+        }*/
 
         UniValue oCmnt(UniValue::VOBJ);
         oCmnt.pushKV("id", cmntItm["otxid"].As<string>());
@@ -133,19 +133,19 @@ UniValue getlastcomments(const JSONRPCRequest& request)
     UniValue aResult(UniValue::VARR);
     for (auto& it : commRes) {
         reindexer::Item cmntItm = it.GetItem();
-        reindexer::Item ocmntItm = it.GetJoined()[0][0].GetItem();
+        //reindexer::Item ocmntItm = it.GetJoined()[0][0].GetItem();
 
         int myScore = 0;
-        if (it.GetJoined().size() > 1 && it.GetJoined()[1].Count() > 0) {
+        /*if (it.GetJoined().size() > 1 && it.GetJoined()[1].Count() > 0) {
             reindexer::Item ocmntScoreItm = it.GetJoined()[1][0].GetItem();
             myScore = ocmntScoreItm["value"].As<int>();
-        }
+        }*/
 
         UniValue oCmnt(UniValue::VOBJ);
         oCmnt.pushKV("id", cmntItm["otxid"].As<string>());
         oCmnt.pushKV("postid", cmntItm["postid"].As<string>());
         oCmnt.pushKV("address", cmntItm["address"].As<string>());
-        oCmnt.pushKV("time", ocmntItm["time"].As<string>());
+        //oCmnt.pushKV("time", ocmntItm["time"].As<string>());
         oCmnt.pushKV("timeUpd", cmntItm["time"].As<string>());
         oCmnt.pushKV("block", cmntItm["block"].As<string>());
         oCmnt.pushKV("msg", cmntItm["msg"].As<string>());

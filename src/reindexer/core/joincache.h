@@ -3,7 +3,6 @@
 #include "core/idset.h"
 #include "core/keyvalue/variant.h"
 #include "core/lrucache.h"
-#include "core/nsselecter/nsselecter.h"
 #include "core/query/query.h"
 #include "tools/serializer.h"
 #include "vendor/murmurhash/MurmurHash3.h"
@@ -11,6 +10,11 @@ namespace reindexer {
 
 struct JoinCacheKey {
 	JoinCacheKey() {}
+	JoinCacheKey(const JoinCacheKey &other) {
+		if (this != &other) {
+			buf_ = other.buf_;
+		}
+	}
 	void SetData(const Query &q) {
 		WrSerializer ser;
 		q.Serialize(ser, (SkipJoinQueries | SkipMergeQueries));
@@ -24,7 +28,6 @@ struct JoinCacheKey {
 		buf_.reserve(buf_.size() + ser.Len());
 		buf_.insert(buf_.end(), ser.Buf(), ser.Buf() + ser.Len());
 	}
-	JoinCacheKey(const JoinCacheKey &other) { buf_ = other.buf_; }
 	size_t Size() const { return sizeof(JoinCacheKey) + buf_.size(); }
 
 	h_vector<uint8_t, 256> buf_;
@@ -42,13 +45,15 @@ struct hash_join_cache_key {
 	}
 };
 
+struct JoinPreResult;
+
 struct JoinCacheVal {
 	JoinCacheVal() {}
 	size_t Size() const { return ids_ ? sizeof(*ids_.get()) + ids_->heap_size() : 0; }
 	IdSet::Ptr ids_;
 	bool matchedAtLeastOnce = false;
 	bool inited = false;
-	SelectCtx::PreResult::Ptr preResult;
+	std::shared_ptr<JoinPreResult> preResult;
 };
 typedef LRUCache<JoinCacheKey, JoinCacheVal, hash_join_cache_key, equal_join_cache_key> MainLruCache;
 

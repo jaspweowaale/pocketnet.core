@@ -6,7 +6,6 @@
 #include "core/keyvalue/key_string.h"
 #include "core/keyvalue/variant.h"
 #include "core/payload/payloadiface.h"
-#include "gason/gason.h"
 #include "tools/serializer.h"
 
 using std::vector;
@@ -28,25 +27,28 @@ public:
 	}
 
 	ItemImpl(const ItemImpl &) = delete;
-	ItemImpl(ItemImpl &&o) = default;
+	ItemImpl(ItemImpl &&) = default;
 	ItemImpl &operator=(const ItemImpl &) = delete;
 	ItemImpl &operator=(ItemImpl &&) noexcept;
 
 	void SetField(int field, const VariantArray &krs);
+	void SetField(string_view jsonPath, const VariantArray &keys);
 	Variant GetField(int field);
+	FieldsSet PkFields() const { return pkFields_; }
 
-	VariantArray GetValueByJSONPath(const string &jsonPath);
+	VariantArray GetValueByJSONPath(string_view jsonPath);
 
 	string_view GetJSON();
 	Error FromJSON(const string_view &slice, char **endp = nullptr, bool pkOnly = false);
 	Error FromCJSON(ItemImpl *other);
 
-	string_view GetCJSON();
-	string_view GetCJSON(WrSerializer &ser);
+	string_view GetCJSON(bool withTagsMatcher = false);
+	string_view GetCJSON(WrSerializer &ser, bool withTagsMatcher = false);
 	Error FromCJSON(const string_view &slice, bool pkOnly = false);
 
 	PayloadType Type() { return payloadType_; }
 	PayloadValue &Value() { return payloadValue_; }
+	PayloadValue &RealValue() { return realValue_; }
 	Payload GetPayload() { return Payload(payloadType_, payloadValue_); }
 
 	TagsMatcher &tagsMatcher() { return tagsMatcher_; }
@@ -57,17 +59,17 @@ public:
 	}
 	const vector<string> &GetPrecepts() { return precepts_; }
 	void Unsafe(bool enable) { unsafe_ = enable; }
-	void Clear(const TagsMatcher &tagsMatcher) {
-		tagsMatcher_ = tagsMatcher;
+	void Clear() {
+		tagsMatcher_ = TagsMatcher();
 		precepts_.clear();
 		cjson_ = string_view();
 		holder_.clear();
-		ser_.Reset();
-		tagsMatcher_.clearUpdated();
+		ser_ = WrSerializer();
 		GetPayload().Reset();
+		payloadValue_.SetLSN(-1);
 		unsafe_ = false;
 		ns_.reset();
-		jsonAllocator_ = JsonAllocator();
+		realValue_ = PayloadValue();
 	}
 	void SetNamespace(std::shared_ptr<Namespace> ns) { ns_ = ns; }
 	std::shared_ptr<Namespace> GetNamespace() { return ns_; }
@@ -76,10 +78,10 @@ protected:
 	// Index fields payload data
 	PayloadType payloadType_;
 	PayloadValue payloadValue_;
+	PayloadValue realValue_;
 	TagsMatcher tagsMatcher_;
 	FieldsSet pkFields_;
 
-	JsonAllocator jsonAllocator_;
 	WrSerializer ser_;
 	string tupleData_;
 

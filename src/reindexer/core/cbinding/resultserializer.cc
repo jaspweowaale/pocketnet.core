@@ -1,6 +1,6 @@
 #include "resultserializer.h"
 #include "core/cjson/tagsmatcher.h"
-#include "core/query/queryresults.h"
+#include "core/queryresults/queryresults.h"
 #include "tools/logger.h"
 
 namespace reindexer {
@@ -21,7 +21,7 @@ void WrResultSerializer::putQueryParams(const QueryResults* results) {
 		assert(opts_.ptVersions.data());
 		if (int(opts_.ptVersions.size()) != results->getMergedNSCount()) {
 			logPrintf(LogWarning, "ptVersionsCount != results->getMergedNSCount: %d != %d. Client's meta data can become incosistent.",
-					  int(opts_.ptVersions.size()), (results->getMergedNSCount()));
+					  opts_.ptVersions.size(), results->getMergedNSCount());
 		}
 		int cnt = 0, totalCnt = std::min(results->getMergedNSCount(), int(opts_.ptVersions.size()));
 
@@ -76,12 +76,21 @@ void WrResultSerializer::putItemParams(const QueryResults* result, int idx, bool
 		PutVarUint(itemRef.proc);
 	}
 
+	if (opts_.flags & kResultsWithRaw) {
+		PutBool(itemRef.raw);
+		if (itemRef.raw) {
+			PutSlice(it.GetRaw());
+			return;
+		}
+	}
+	Error err;
+
 	switch ((opts_.flags & kResultsFormatMask)) {
 		case kResultsJson:
-			it.GetJSON(*this);
+			err = it.GetJSON(*this);
 			break;
 		case kResultsCJson:
-			it.GetCJSON(*this);
+			err = it.GetCJSON(*this);
 			break;
 		case kResultsPtrs:
 			PutUInt64(uintptr_t(itemRef.value.Ptr()));
@@ -89,8 +98,9 @@ void WrResultSerializer::putItemParams(const QueryResults* result, int idx, bool
 		case kResultsPure:
 			break;
 		default:
-			abort();
+			throw Error(errParams, "Can't serialize query results: unknown formar %d", int((opts_.flags & kResultsFormatMask)));
 	}
+	if (!err.ok()) throw Error(errParseBin, "Internal error serializing query results: %s", err.what());
 }
 
 void WrResultSerializer::putPayloadType(const QueryResults* results, int nsid) {
@@ -130,21 +140,26 @@ bool WrResultSerializer::PutResults(const QueryResults* result) {
 
 	putQueryParams(result);
 
-	for (unsigned i = 0; i < opts_.fetchLimit; i++) {
+	for (unsigned i = 0; i < opts_.fetchLimit; ++i) {
 		// Put Item ID and version
 		putItemParams(result, i, true);
 
 		if (opts_.flags & kResultsWithJoined) {
 			auto rowIt = result->begin() + (i + opts_.fetchOffset);
-
-			const QRVector& jres = rowIt.GetJoined();
-			// Put count of joined subqueires for item ID
-			PutVarUint(jres.size());
-			for (auto& jfres : jres) {
-				// Put count of returned items from joined namespace
-				PutVarUint(jfres.Count());
-				for (unsigned j = 0; j < jfres.Count(); j++) {
-					putItemParams(&jfres, j, false);
+			joins::ItemIterator jIt = rowIt.GetJoinedItemsIterator();
+			PutVarUint(jIt.getJoinedItemsCount() > 0 ? jIt.getJoinedFieldsCount() : 0);
+			if (jIt.getJoinedItemsCount() > 0) {
+				size_t joinedField = rowIt.qr_->joined_.size();
+				for (size_t ns = 0; ns < rowIt.GetItemRef().nsid; ++ns) {
+					joinedField += rowIt.qr_->joined_[ns].GetJoinedSelectorsCount();
+				}
+				for (auto it = jIt.begin(); it != jIt.end(); ++it, ++joinedField) {
+					PutVarUint(it.ItemsCount());
+					if (it.ItemsCount() == 0) continue;
+					QueryResults qr = it.ToQueryResults();
+					qr.addNSContext(result->getPayloadType(joinedField), result->getTagsMatcher(joinedField),
+									result->getFieldsFilter(joinedField));
+					for (size_t idx = 0; idx < qr.Count(); idx++) putItemParams(&qr, idx, false);
 				}
 			}
 		}
@@ -152,4 +167,5 @@ bool WrResultSerializer::PutResults(const QueryResults* result) {
 	}
 	return opts_.fetchOffset + opts_.fetchLimit >= result->Count();
 }
+
 }  // namespace reindexer

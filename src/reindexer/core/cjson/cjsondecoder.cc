@@ -1,67 +1,10 @@
 #include "cjsondecoder.h"
+#include "cjsontools.h"
 #include "core/keyvalue/p_string.h"
 #include "tagsmatcher.h"
 #include "tools/serializer.h"
 
 namespace reindexer {
-
-void copyCJsonValue(int tagType, Serializer &rdser, WrSerializer &wrser) {
-	switch (tagType) {
-		case TAG_DOUBLE:
-			wrser.PutDouble(rdser.GetDouble());
-			break;
-		case TAG_VARINT:
-			wrser.PutVarint(rdser.GetVarint());
-			break;
-		case TAG_BOOL:
-			wrser.PutBool(rdser.GetBool());
-			break;
-		case TAG_STRING:
-			wrser.PutVString(rdser.GetVString());
-			break;
-		case TAG_NULL:
-			break;
-		default:
-			throw Error(errParseJson, "Unexpected cjson typeTag '%s' while parsing value", ctag(tagType).TypeName());
-	}
-}
-
-static void skipCjsonTag(ctag tag, Serializer &rdser) {
-	const bool embeddedField = (tag.Field() < 0);
-	switch (tag.Type()) {
-		case TAG_ARRAY: {
-			if (embeddedField) {
-				carraytag atag = rdser.GetUInt32();
-				for (int i = 0; i < atag.Count(); i++) {
-					ctag t = atag.Tag() != TAG_OBJECT ? atag.Tag() : rdser.GetVarUint();
-					skipCjsonTag(t, rdser);
-				}
-			} else {
-				rdser.GetVarUint();
-			}
-		} break;
-
-		case TAG_OBJECT:
-			for (ctag otag = rdser.GetVarUint(); otag.Type() != TAG_END; otag = rdser.GetVarUint()) {
-				skipCjsonTag(otag, rdser);
-			}
-			break;
-		default:
-			if (embeddedField) rdser.GetRawVariant(KeyValueType(tag.Type()));
-	}
-}
-
-static inline Variant cjsonValueToVariant(int tag, Serializer &rdser, KeyValueType dstType, Error &err) {
-	try {
-		KeyValueType srcType = KeyValueType(tag);
-		if (dstType == KeyValueInt && srcType == KeyValueInt64) srcType = KeyValueInt;
-		return rdser.GetRawVariant(KeyValueType(srcType)).convert(dstType);
-	} catch (const Error &e) {
-		err = e;
-	}
-
-	return Variant();
-}
 
 CJsonDecoder::CJsonDecoder(TagsMatcher &tagsMatcher) : tagsMatcher_(tagsMatcher), filter_(nullptr), lastErr_(errOK) {}
 CJsonDecoder::CJsonDecoder(TagsMatcher &tagsMatcher, const FieldsSet *filter)
@@ -123,8 +66,13 @@ bool CJsonDecoder::decodeCJson(Payload *pl, Serializer &rdser, WrSerializer &wrs
 			} else if (tagType != TAG_NULL) {
 				pl->Set(field, {cjsonValueToVariant(tagType, rdser, fieldType, err)}, true);
 				if (err.ok()) {
-					wrser.PutVarUint(static_cast<int>(ctag(tagType, tagName, field)));
+					// TODO: remove hardcoded conversion from KeyType to TAG
+
+					wrser.PutVarUint(
+						static_cast<int>(ctag(fieldType == KeyValueInt ? KeyValueType(TAG_VARINT) : fieldType, tagName, field)));
 				}
+			} else {
+				wrser.PutVarUint(static_cast<int>(ctag(tagType, tagName)));
 			}
 			if (!err.ok()) {
 				// Type error occuried. Just store field, and do not put it to index

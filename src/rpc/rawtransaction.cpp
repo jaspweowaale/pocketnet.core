@@ -37,6 +37,7 @@
 #include "antibot/antibot.h"
 #include "html.h"
 #include "index/addrindex.h"
+#include <reindexer\tools\stringstools.cc>
 
 static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& entry)
 {
@@ -2033,18 +2034,18 @@ UniValue getPostData(reindexer::Item& itm, std::string address)
         UniValue oCmnt(UniValue::VOBJ);
 
         reindexer::Item cmntItm = cmntRes[0].GetItem();
-        reindexer::Item ocmntItm = cmntRes[0].GetJoined()[0][0].GetItem();
+        //reindexer::Item ocmntItm = cmntRes[0].GetJoined()[0][0].GetItem();
         
         int myScore = 0;
-        if (cmntRes[0].GetJoined().size() > 1 && cmntRes[0].GetJoined()[1].Count() > 0) {
+        /*if (cmntRes[0].GetJoined().size() > 1 && cmntRes[0].GetJoined()[1].Count() > 0) {
             reindexer::Item ocmntScoreItm = cmntRes[0].GetJoined()[1][0].GetItem();
             myScore = ocmntScoreItm["value"].As<int>();
-        }
+        }*/
 
         oCmnt.pushKV("id", cmntItm["otxid"].As<string>());
         oCmnt.pushKV("postid", cmntItm["postid"].As<string>());
         oCmnt.pushKV("address", cmntItm["address"].As<string>());
-        oCmnt.pushKV("time", ocmntItm["time"].As<string>());
+        //oCmnt.pushKV("time", ocmntItm["time"].As<string>());
         oCmnt.pushKV("timeUpd", cmntItm["time"].As<string>());
         oCmnt.pushKV("block", cmntItm["block"].As<string>());
         oCmnt.pushKV("msg", cmntItm["msg"].As<string>());
@@ -2306,9 +2307,9 @@ std::map<std::string, UniValue> getUsersProfiles(std::vector<string> addresses, 
     // Get count of posts by addresses
     reindexer::AggregationResult aggRes;
     std::map<std::string, int> _posts_cnt;
-    if (g_pocketdb->SelectAggr(reindexer::Query("Posts").Where("address", CondSet, addresses).Where("last", CondEq, true).Aggregate("address", AggFacet), "address", aggRes).ok()) {
+    if (g_pocketdb->SelectAggr(reindexer::Query("Posts").Where("address", CondSet, addresses).Where("last", CondEq, true).Aggregate(AggFacet, {"address"}), "address", aggRes).ok()) {
         for (const auto& f : aggRes.facets) {
-            _posts_cnt.insert_or_assign(f.value, f.count);
+            _posts_cnt.insert_or_assign(f.values[0], f.count);
         }
     }
 

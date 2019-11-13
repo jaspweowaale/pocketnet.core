@@ -1,8 +1,9 @@
 #include "selecter.h"
 #include "core/ft/bm25.h"
-#include "core/ft/ft_fuzzy/dataholder/smardeque.h"
 #include "core/ft/typos.h"
+#include "sort/pdqsort.hpp"
 #include "tools/logger.h"
+
 namespace reindexer {
 // Relevancy procent of full word match
 const int kFullMatchProc = 100;
@@ -35,7 +36,7 @@ void Selecter::prepareVariants(FtSelectContext &ctx, FtDSLEntry &term, std::vect
 	}
 
 	// Apply stemmers
-	string tmpstr;
+	string tmpstr, stemstr;
 	for (auto &v : variantsUtf16) {
 		utf16_to_utf8(v.first, tmpstr);
 		ctx.variants.push_back({tmpstr, term.opts, v.second});
@@ -43,17 +44,16 @@ void Selecter::prepareVariants(FtSelectContext &ctx, FtDSLEntry &term, std::vect
 			for (auto &lang : langs) {
 				auto stemIt = holder_.stemmers_.find(lang);
 				if (stemIt == holder_.stemmers_.end()) {
-					throw Error(errParams, "Stemmer for language %s is not available", lang.c_str());
+					throw Error(errParams, "Stemmer for language %s is not available", lang);
 				}
-				char *stembuf = reinterpret_cast<char *>(alloca(1 + tmpstr.size() * 4));
-				stemIt->second.stem(stembuf, 1 + tmpstr.size() * 4, tmpstr.data(), tmpstr.length());
-				if (tmpstr != stembuf) {
+				stemIt->second.stem(tmpstr, stemstr);
+				if (tmpstr != stemstr) {
 					FtDslOpts opts = term.opts;
 					opts.pref = true;
 
 					if (&v != &variantsUtf16[0]) opts.suff = false;
 
-					ctx.variants.push_back({stembuf, opts, v.second - kStemProcDecrease});
+					ctx.variants.push_back({stemstr, opts, v.second - kStemProcDecrease});
 				}
 			}
 		}
@@ -72,19 +72,19 @@ Selecter::MergeData Selecter::Process(FtDSLQuery &dsl) {
 		this->prepareVariants(ctx, term, holder_.cfg_->stemmers);
 
 		if (holder_.cfg_->logLevel >= LogInfo) {
-			string vars;
+			WrSerializer wrSer;
 			for (auto &variant : ctx.variants) {
-				if (&variant != &*ctx.variants.begin()) vars += ", ";
-				vars += variant.pattern;
+				if (&variant != &*ctx.variants.begin()) wrSer << ", ";
+				wrSer << variant.pattern;
 			}
-			vars += "], typos: [";
+			wrSer << "], typos: [";
 			typos_context tctx[kMaxTyposInWord];
 			if (term.opts.typos)
-				mktypos(tctx, term.pattern, holder_.cfg_->maxTyposInWord, holder_.cfg_->maxTypoLen, [&vars](const string &typo, int) {
-					vars += typo;
-					vars += ", ";
+				mktypos(tctx, term.pattern, holder_.cfg_->maxTyposInWord, holder_.cfg_->maxTypoLen, [&wrSer](string_view typo, int) {
+					wrSer << typo;
+					wrSer << ", ";
 				});
-			logPrintf(LogInfo, "Variants: [%s]", vars.c_str());
+			logPrintf(LogInfo, "Variants: [%s]", wrSer.Slice());
 		}
 
 		processVariants(ctx);
@@ -108,7 +108,7 @@ void Selecter::processStepVariants(FtSelectContext &ctx, DataHolder::CommitStep 
 	auto keyIt = suffixes.lower_bound(tmpstr);
 
 	int matched = 0, skipped = 0, vids = 0;
-	bool withPrefixes = (variant.opts.pref || variant.opts.suff);
+	bool withPrefixes = variant.opts.pref;
 	bool withSuffixes = variant.opts.suff;
 
 	// Walk current variant in suffixes array and fill results
@@ -126,7 +126,7 @@ void Selecter::processStepVariants(FtSelectContext &ctx, DataHolder::CommitStep 
 		int matchLen = tmpstr.length();
 
 		if (!withSuffixes && suffixLen) continue;
-		if (!withPrefixes && wordLength != matchLen) break;
+		if (!withPrefixes && wordLength != matchLen + suffixLen) break;
 
 		int matchDif = std::abs(long(wordLength - matchLen + suffixLen));
 		int proc =
@@ -139,7 +139,7 @@ void Selecter::processStepVariants(FtSelectContext &ctx, DataHolder::CommitStep 
 			ctx.foundWords[glbwordId] = std::make_pair(ctx.rawResults.size() - 1, res.size() - 1);
 			if (holder_.cfg_->logLevel >= LogTrace)
 				logPrintf(LogTrace, " matched %s '%s' of word '%s', %d vids, %d%%", suffixLen ? "suffix" : "prefix", keyIt->first, word,
-						  int(holder_.getWordById(glbwordId).vids_.size()), proc);
+						  holder_.getWordById(glbwordId).vids_.size(), proc);
 			matched++;
 			vids += holder_.getWordById(glbwordId).vids_.size();
 		} else {
@@ -149,8 +149,8 @@ void Selecter::processStepVariants(FtSelectContext &ctx, DataHolder::CommitStep 
 		}
 	} while ((keyIt++).lcp() >= int(tmpstr.length()));
 	if (holder_.cfg_->logLevel >= LogInfo)
-		logPrintf(LogInfo, "Lookup variant '%s' (%d%%), matched %d suffixes, with %d vids, skiped %d", tmpstr.c_str(), variant.proc,
-				  matched, vids, skipped);
+		logPrintf(LogInfo, "Lookup variant '%s' (%d%%), matched %d suffixes, with %d vids, skiped %d", tmpstr, variant.proc, matched, vids,
+				  skipped);
 }
 
 void Selecter::processVariants(FtSelectContext &ctx) {
@@ -173,7 +173,7 @@ void Selecter::processTypos(FtSelectContext &ctx, FtDSLEntry &term) {
 		typos_context tctx[kMaxTyposInWord];
 		auto &typos = step.typos_;
 		int matched = 0, skiped = 0, vids = 0;
-		mktypos(tctx, term.pattern, holder_.cfg_->maxTyposInWord, holder_.cfg_->maxTypoLen, [&](const string &typo, int tcount) {
+		mktypos(tctx, term.pattern, holder_.cfg_->maxTyposInWord, holder_.cfg_->maxTypoLen, [&](string_view typo, int tcount) {
 			auto typoRng = typos.equal_range(typo);
 			tcount = holder_.cfg_->maxTyposInWord - tcount;
 			for (auto typoIt = typoRng.first; typoIt != typoRng.second; typoIt++) {
@@ -193,7 +193,7 @@ void Selecter::processTypos(FtSelectContext &ctx, FtDSLEntry &term) {
 
 					if (holder_.cfg_->logLevel >= LogTrace)
 						logPrintf(LogTrace, " matched typo '%s' of word '%s', %d ids, %d%%", typoIt->first,
-								  step.suffixes_.word_at(wordIdSfx), int(holder_.getWordById(wordIdglb).vids_.size()), proc);
+								  step.suffixes_.word_at(wordIdSfx), holder_.getWordById(wordIdglb).vids_.size(), proc);
 					++matched;
 					vids += holder_.getWordById(wordIdglb).vids_.size();
 				} else
@@ -211,15 +211,8 @@ void Selecter::debugMergeStep(const char *msg, int vid, float normBm25, float no
 #ifdef REINDEX_FT_EXTRA_DEBUG
 	if (holder_.cfg_->logLevel < LogTrace) return;
 
-	vector<unique_ptr<string>> bufStrs;
-	auto fieldStrVec = this->getDocFields(*vdocs[vid].keyDoc, bufStrs);
-	string text = fieldStrVec[0].ToString();
-	if (text.length() > 48) {
-		text = text.substr(0, 48) + "...";
-	}
-
-	logPrintf(LogTrace, "%s - '%s' (vid %d), bm25 %f, dist %f, rank %d (prev rank %d)", msg, text.c_str(), vid, normBm25, normDist,
-			  finalRank, prevRank);
+	logPrintf(LogTrace, "%s - '%s' (vid %d), bm25 %f, dist %f, rank %d (prev rank %d)", msg, holder_.vdocs_[vid].keyDoc, vid, normBm25,
+			  normDist, finalRank, prevRank);
 #else
 	(void)msg;
 	(void)vid;
@@ -375,8 +368,8 @@ Selecter::MergeData Selecter::mergeResults(vector<TextSearchResults> &rawResults
 
 	int idsMaxCnt = 0;
 	for (auto &rawRes : rawResults) {
-		std::sort(rawRes.begin(), rawRes.end(),
-				  [](const TextSearchResult &lhs, const TextSearchResult &rhs) { return lhs.proc_ > rhs.proc_; });
+		boost::sort::pdqsort(rawRes.begin(), rawRes.end(),
+							 [](const TextSearchResult &lhs, const TextSearchResult &rhs) { return lhs.proc_ > rhs.proc_; });
 		if (rawRes.term.opts.op == OpOr || !idsMaxCnt) idsMaxCnt += rawRes.idsCnt_;
 	}
 
@@ -392,10 +385,9 @@ Selecter::MergeData Selecter::mergeResults(vector<TextSearchResults> &rawResults
 
 		if (rawRes.term.opts.op != OpNot) merged.mergeCnt++;
 	}
-	if (holder_.cfg_->logLevel >= LogInfo)
-		logPrintf(LogInfo, "Complex merge (%d patterns): out %d vids", int(rawResults.size()), int(merged.size()));
+	if (holder_.cfg_->logLevel >= LogInfo) logPrintf(LogInfo, "Complex merge (%d patterns): out %d vids", rawResults.size(), merged.size());
 
-	std::sort(merged.begin(), merged.end(), [](const MergeInfo &lhs, const MergeInfo &rhs) { return lhs.proc > rhs.proc; });
+	boost::sort::pdqsort(merged.begin(), merged.end(), [](const MergeInfo &lhs, const MergeInfo &rhs) { return lhs.proc > rhs.proc; });
 
 	return merged;
 }

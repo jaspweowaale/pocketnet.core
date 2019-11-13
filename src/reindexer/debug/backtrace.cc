@@ -1,68 +1,39 @@
-#define __STDC_FORMAT_MACROS 1
-#include <cstring>
-
-#ifdef REINDEX_WITH_EXECINFO
-
-#include <cxxabi.h>
-#include <execinfo.h>
-#include <inttypes.h>
+#include "backtrace.h"
+#ifndef WIN32
 #include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <sstream>
+#include "estl/span.h"
+#include "resolver.h"
+// There are 3 backtrace methods are available:
+// 1. stangalone libunwind ( https://github.com/libunwind/libunwind )
+// 2. libgcc's/llvm built in unwind
+// 3. GNU's execinfo backtrace() call
 
-char* resolve_symbol(void* addr, bool onlyName) {
-	char filename[512], symbol[512], out[1024];
-	uintptr_t address = uintptr_t(addr), offset = 0;
-	char** symbols = backtrace_symbols(&addr, 1);
-	*filename = *symbol = 0;
-
-#if __APPLE__
-	int ret =
-		sscanf(symbols[0], "%*d%*[ \t]%s%*[ \t]%" SCNxPTR "%*[ \t]%s%*[ \t]+%*[ \t]%" SCNuPTR, filename, &address, symbol, &offset) + 1;
-#else
-	int ret = sscanf(symbols[0], "%[^(](%[A-Za-z0-9_]+%" SCNxPTR ")%*[ \t][%" SCNxPTR "]", filename, symbol, &offset, &address);
+#if REINDEX_WITH_LIBUNWIND
+#define UNW_LOCAL_ONLY
+#include <libunwind.h>
 #endif
 
-	free(symbols);
-	if (ret < 4 && onlyName) {
-		snprintf(out, sizeof(out), "%s@%" PRIxPTR, filename, address);
-		return strdup(out);
-	}
+#if REINDEX_WITH_UNWIND
+#include <unwind.h>
+#endif
 
-	int status;
-	char* demangled = abi::__cxa_demangle(symbol, NULL, NULL, &status);
-	if (onlyName) return demangled ? demangled : strdup(symbol);
+#if REINDEX_WITH_EXECINFO
+#include <execinfo.h>
+#endif
 
-	snprintf(out, sizeof(out), " %-30s 0x%016" PRIxPTR " %s + %" PRIuPTR, filename, address, demangled ? demangled : symbol, offset);
-	free(demangled);
-	return strdup(out);
-}
+namespace reindexer {
 
-static void sighandler(int sig) {
-	fprintf(stderr, "\nSignal %d, backtrace:\n", sig);
-	void* addrlist[64];
-	int addrlen = backtrace(addrlist, sizeof(addrlist) / sizeof(void*));
+}  // namespace reindexer
 
-	for (int i = 0; i < addrlen; i++) {
-		char* p = resolve_symbol(addrlist[i], false);
-		fprintf(stderr, "%d %s\n", i, p);
-		free(p);
-	}
-	exit(-1);
-}
-
-void backtrace_init() {
-	signal(SIGSEGV, sighandler);
-	signal(SIGABRT, sighandler);
-	signal(SIGBUS, sighandler);
-}
 #else
+namespace reindexer {
+namespace debug {
 void backtrace_init() {}
+void backtrace_set_writer(std::function<void(string_view out)>) {}
+int backtrace_internal(void **, size_t, void *, string_view &) { return 0; }
 
-#ifdef _WIN32
-char* resolve_symbol(void*, bool) { return _strdup(""); }
-#else
-char* resolve_symbol(void*, bool) { return strdup(""); }
-#endif
+}  // namespace debug
+}  // namespace reindexer
 
 #endif

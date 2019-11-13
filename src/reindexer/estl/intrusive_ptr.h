@@ -60,6 +60,12 @@ public:
 	void reset() { this_type().swap(*this); }
 
 	void reset(T *rhs) { this_type(rhs).swap(*this); }
+	bool unique() const {
+		if (px == 0) {
+			return true;
+		}
+		return intrusive_ptr_is_unique(px);
+	}
 
 	T *get() const { return px; }
 
@@ -152,12 +158,22 @@ class intrusive_atomic_rc_wrapper;
 
 template <typename T>
 inline static void intrusive_ptr_add_ref(intrusive_atomic_rc_wrapper<T> *x) {
-	if (x) x->refcount++;
+	if (x) {
+		x->refcount.fetch_add(1, std::memory_order_relaxed);
+	}
 }
 
 template <typename T>
 inline static void intrusive_ptr_release(intrusive_atomic_rc_wrapper<T> *x) {
-	if (x && x->refcount-- == 1) delete x;
+	if (x && x->refcount.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+		delete x;
+	}
+}
+
+template <typename T>
+inline static bool intrusive_ptr_is_unique(intrusive_atomic_rc_wrapper<T> *x) {
+	// std::memory_order_acquire - is essetial for COW constructions based on intrusive_ptr
+	return !x || (x->refcount.load(std::memory_order_acquire) == 1);
 }
 
 template <typename T>
@@ -172,6 +188,7 @@ protected:
 
 	friend void intrusive_ptr_add_ref<>(intrusive_atomic_rc_wrapper<T> *x);
 	friend void intrusive_ptr_release<>(intrusive_atomic_rc_wrapper<T> *x);
+	friend bool intrusive_ptr_is_unique<>(intrusive_atomic_rc_wrapper<T> *x);
 };
 
 template <typename T, typename... Args>

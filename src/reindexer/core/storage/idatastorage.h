@@ -1,7 +1,7 @@
 #pragma once
 
 #include <memory>
-#include "estl/string_view.h"
+#include "storagetype.h"
 #include "tools/errors.h"
 
 struct StorageOpts;
@@ -77,7 +77,6 @@ public:
 	/// use the snapshot after this call.
 	/// @param snapshot - pointer to a snapshot
 	/// that was acquired previously.
-	/// @return true if operation went ok.
 	virtual void ReleaseSnapshot(Snapshot::Ptr snapshot) = 0;
 
 	/// Flushes all updates to Storage.
@@ -97,6 +96,13 @@ public:
 	/// Destroy the storage.
 	/// @param path - path to Storage.
 	virtual void Destroy(const string& path) = 0;
+
+	/// Repair the storage
+	/// @param path - path to Storage.
+	virtual Error Repair(const string& path) = 0;
+
+	/// Get storage type
+	virtual StorageType Type() const noexcept = 0;
 };
 
 /// Buffer for a Batch Write.
