@@ -70,6 +70,7 @@ UniValue getcomments(const JSONRPCRequest& request)
     UniValue aResult(UniValue::VARR);
     for (auto& it : commRes) {
         reindexer::Item cmntItm = it.GetItem();
+        // TODO (brangr): New joined API
         reindexer::Item ocmntItm = it.GetJoinedItemsIterator().begin().ToQueryResults()[0].GetItem();
         
         int myScore = 0;
@@ -133,6 +134,7 @@ UniValue getlastcomments(const JSONRPCRequest& request)
     UniValue aResult(UniValue::VARR);
     for (auto& it : commRes) {
         reindexer::Item cmntItm = it.GetItem();
+        // TODO (brangr): New joined API
         //reindexer::Item ocmntItm = it.GetJoined()[0][0].GetItem();
 
         int myScore = 0;

@@ -61,11 +61,11 @@ bool ConvertOPToTableName(std::string op, std::string& ri_table)
     bool ret = true;
 
     if (op == OR_POST)
-        ri_table = "Posts";
+        ri_table = "Post";
     else if (op == OR_POST_EDIT)
-        ri_table = "Posts";
+        ri_table = "Post";
     else if (op == OR_POST_DELETE)
-        ri_table = "Posts";
+        ri_table = "Post";
     else if (op == OR_SCORE)
         ri_table = "Scores";
     else if (op == OR_COMPLAIN)
@@ -77,7 +77,7 @@ bool ConvertOPToTableName(std::string op, std::string& ri_table)
     else if (op == OR_UNSUBSCRIBE)
         ri_table = "Subscribes";
     else if (op == OR_USERINFO)
-        ri_table = "Users";
+        ri_table = "User";
     else if (op == OR_BLOCKING)
         ri_table = "Blocking";
     else if (op == OR_UNBLOCKING)
