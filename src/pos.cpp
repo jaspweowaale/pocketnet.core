@@ -574,7 +574,8 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
                         if (allPostRatings.find(_post_address) == allPostRatings.end()) allPostRatings.insert(std::make_pair(_post_address, 0));
                         allPostRatings[_post_address] += (_value - 3);
 
-                        if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL) {
+                        // Find winners with referral program
+                        if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG && pindexPrev->nHeight < CH_CONSENSUS_LOTTERY_REFERRAL_END) {
                             reindexer::Item _referrer_itm;
                             if (g_pocketdb->SelectOne( reindexer::Query("UsersView").Where("address", CondEq, _post_address).Not().Where("referrer", CondEq, ""), _referrer_itm ).ok()) {
                                 std::string _referrer_address = _referrer_itm["referrer"].As<string>();
@@ -611,7 +612,8 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
                         if (allCommentRatings.find(_comment_address) == allCommentRatings.end()) allCommentRatings.insert(std::make_pair(_comment_address, 0));
                         allCommentRatings[_comment_address] += _value;
 
-                        if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL) {
+                        // Find winners with referral program
+                        if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG && pindexPrev->nHeight < CH_CONSENSUS_LOTTERY_REFERRAL_END) {
                             reindexer::Item _referrer_itm;
                             if (g_pocketdb->SelectOne( reindexer::Query("UsersView").Where("address", CondEq, _comment_address).Not().Where("referrer", CondEq, ""), _referrer_itm ).ok()) {
                                 std::string _referrer_address = _referrer_itm["referrer"].As<string>();
@@ -690,7 +692,7 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
     ret = GenerateOuts(nCredit, results, totalAmount, vLotteryPost, OP_WINNER_POST, pindexPrev->nHeight, winner_types) || ret;
     ret = GenerateOuts(nCredit, results, totalAmount, vLotteryComment, OP_WINNER_COMMENT, pindexPrev->nHeight, winner_types) || ret;
 
-    if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL)
+    if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG && pindexPrev->nHeight < CH_CONSENSUS_LOTTERY_REFERRAL_END)
     {
         std::vector<std::string> vLotteryPostRef;
         GetReferrers(vLotteryPost, mLotteryPostRef, vLotteryPostRef);
@@ -718,19 +720,19 @@ bool GenerateOuts(CAmount nCredit, std::vector<CTxOut>& results, CAmount& totalA
     if (winners.size() > 0 && winners.size() <= 25)
     {
         CAmount ratingReward = 0;
-        if (height < CH_CONSENSUS_LOTTERY_REFERRAL)
-        {
-            ratingReward = nCredit * 0.5;
-            if (op_code_type == OP_WINNER_COMMENT) ratingReward = ratingReward / 10;
-            totalAmount += ratingReward;
-        }
-        else
+        if (height >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG)
         {
             // Referrer program 5 - 100%; 2.0 - nodes; 3.0 - all for lottery; 2.0 - posts; 0.4 - referrer over posts (20%); 0.5 - comment; 0.1 - referrer over comment (20%);
             if (op_code_type == OP_WINNER_POST) ratingReward = nCredit * 0.40;
             if (op_code_type == OP_WINNER_POST_REFERRAL) ratingReward = nCredit * 0.08;
             if (op_code_type == OP_WINNER_COMMENT) ratingReward = nCredit * 0.10;
             if (op_code_type == OP_WINNER_COMMENT_REFERRAL) ratingReward = nCredit * 0.02;
+            totalAmount += ratingReward;
+        }
+        else
+        {
+            ratingReward = nCredit * 0.5;
+            if (op_code_type == OP_WINNER_COMMENT) ratingReward = ratingReward / 10;
             totalAmount += ratingReward;
         }
 
@@ -752,7 +754,7 @@ bool GenerateOuts(CAmount nCredit, std::vector<CTxOut>& results, CAmount& totalA
             CTxDestination dest = DecodeDestination(addr);
             CScript scriptPubKey = GetScriptForDestination(dest);
             
-            if (height >= CH_CONSENSUS_LOTTERY_REFERRAL)
+            if (height >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG)
                 winner_types.push_back(op_code_type);
                 
             results.push_back(CTxOut(re, scriptPubKey)); // send to ratings
