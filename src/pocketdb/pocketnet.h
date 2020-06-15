@@ -40,7 +40,8 @@ enum Limit {
     full_comment_score_limit,
     comment_size_limit,
     edit_comment_timeout,
-    scores_depth_modify_reputation
+    scores_depth_modify_reputation,
+    lottery_referral_depth
 };
 
 void FillLimits(const CChainParams& params);
@@ -89,11 +90,11 @@ bool IsCheckpointTransaction(std::string hash);
 
 
 // Change in consensus rules
-#define CH_CONSENSUS_SCORE_BLOCKING_ON      430000
-#define CH_CONSENSUS_SCORE_BLOCKING_OFF     514185
-#define CH_CONSENSUS_LOTTERY_REFERRAL_BEG   514185
-#define CH_CONSENSUS_LOTTERY_REFERRAL_END   1050000
-#define CH_CONSENSUS_OPRETURN_CHECK         514185
+#define CH_CONSENSUS_SCORE_BLOCKING_ON              430000
+#define CH_CONSENSUS_SCORE_BLOCKING_OFF             514185
+#define CH_CONSENSUS_OPRETURN_CHECK                 514185
+#define CH_CONSENSUS_LOTTERY_REFERRAL_BEG           514185
+#define CH_CONSENSUS_LOTTERY_REFERRAL_LIMITATION    713100
 
 
 #endif // POCKETNET_H

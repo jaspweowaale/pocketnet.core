@@ -192,7 +192,7 @@ static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string &)
         if (valRequest.isObject()) {
             jreq.parse(valRequest);
 
-            //LogPrint(BCLog::RPC, "RPC Method %s - %s\n", jreq.strMethod, valRequest.write());
+            LogPrint(BCLog::RPC, "RPC Method %s - %s\n", jreq.strMethod, valRequest.write());
             //auto start = high_resolution_clock::now();
             UniValue result = tableRPC.execute(jreq);
             //auto stop = high_resolution_clock::now(); 

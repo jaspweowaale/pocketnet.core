@@ -265,6 +265,12 @@ void FillLimits(const CChainParams& params) {
     _scores_depth_modify_reputation.insert({ 0, 336*24*3600 });
     _scores_depth_modify_reputation.insert({ fork_20190920, 30*24*3600 });
     Limits.insert(std::make_pair(Limit::scores_depth_modify_reputation, _scores_depth_modify_reputation));
+
+    // lottery_referral_depth
+    std::map<int, int64_t> _lottery_referral_depth;
+    _lottery_referral_depth.insert({ 0, 30*24*3600 });
+    Limits.insert(std::make_pair(Limit::lottery_referral_depth, _lottery_referral_depth));
+    
 };
 
 // Get actual limit for current height

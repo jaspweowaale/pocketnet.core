@@ -538,6 +538,8 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
     CBlock blockPrev;
     ReadBlockFromDisk(blockPrev, pindexPrev, Params().GetConsensus());
 
+    int64_t _lottery_referral_depth = GetActualLimit(Limit::lottery_referral_depth, pindexPrev->nHeight);
+
     // Get all users from prev block for current lottery
     for (const auto& tx : blockPrev.vtx) {
         std::vector<std::string> vasm;
@@ -575,14 +577,18 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
                         allPostRatings[_post_address] += (_value - 3);
 
                         // Find winners with referral program
-                        if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG && pindexPrev->nHeight < CH_CONSENSUS_LOTTERY_REFERRAL_END) {
+                        if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG) {
                             reindexer::Item _referrer_itm;
-                            if (g_pocketdb->SelectOne( reindexer::Query("UsersView").Where("address", CondEq, _post_address).Not().Where("referrer", CondEq, ""), _referrer_itm ).ok()) {
-                                std::string _referrer_address = _referrer_itm["referrer"].As<string>();
-                                if (_referrer_address != "" && _score_address != _referrer_address) {
-                                    if (mLotteryPostRef.find(_post_address) == mLotteryPostRef.end()) {
-                                        mLotteryPostRef.emplace(_post_address, _referrer_address);
-                                    }
+
+                            reindexer::Query _referrer_query = reindexer::Query("UsersView").Where("address", CondEq, _post_address).Not().Where("referrer", CondEq, "").Not().Where("referrer", CondEq, _score_address);
+                            if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_LIMITATION) {
+                                _referrer_query = _referrer_query.Where("regdate", CondGe, (int64_t)tx->nTime - _lottery_referral_depth);
+                            }
+                            
+                            if (g_pocketdb->SelectOne( _referrer_query , _referrer_itm ).ok()) {
+                                if (mLotteryPostRef.find(_post_address) == mLotteryPostRef.end()) {
+                                    std::string _referrer_address = _referrer_itm["referrer"].As<string>();
+                                    mLotteryPostRef.emplace(_post_address, _referrer_address);
                                 }
                             }
                         }
@@ -613,14 +619,18 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
                         allCommentRatings[_comment_address] += _value;
 
                         // Find winners with referral program
-                        if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG && pindexPrev->nHeight < CH_CONSENSUS_LOTTERY_REFERRAL_END) {
+                        if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG) {
                             reindexer::Item _referrer_itm;
-                            if (g_pocketdb->SelectOne( reindexer::Query("UsersView").Where("address", CondEq, _comment_address).Not().Where("referrer", CondEq, ""), _referrer_itm ).ok()) {
-                                std::string _referrer_address = _referrer_itm["referrer"].As<string>();
-                                if (_referrer_address != "" && _score_address != _referrer_address) {
-                                    if (mLotteryCommentRef.find(_comment_address) == mLotteryCommentRef.end()) {
-                                        mLotteryCommentRef.emplace(_comment_address, _referrer_address);
-                                    }
+
+                            reindexer::Query _referrer_query = reindexer::Query("UsersView").Where("address", CondEq, _comment_address).Not().Where("referrer", CondEq, "").Not().Where("referrer", CondEq, _score_address);
+                            if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_LIMITATION) {
+                                _referrer_query = _referrer_query.Where("regdate", CondGe, (int64_t)tx->nTime - _lottery_referral_depth);
+                            }
+                            
+                            if (g_pocketdb->SelectOne( _referrer_query , _referrer_itm ).ok()) {
+                                if (mLotteryCommentRef.find(_comment_address) == mLotteryCommentRef.end()) {
+                                    std::string _referrer_address = _referrer_itm["referrer"].As<string>();
+                                    mLotteryCommentRef.emplace(_comment_address, _referrer_address);
                                 }
                             }
                         }
@@ -692,7 +702,7 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
     ret = GenerateOuts(nCredit, results, totalAmount, vLotteryPost, OP_WINNER_POST, pindexPrev->nHeight, winner_types) || ret;
     ret = GenerateOuts(nCredit, results, totalAmount, vLotteryComment, OP_WINNER_COMMENT, pindexPrev->nHeight, winner_types) || ret;
 
-    if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG && pindexPrev->nHeight < CH_CONSENSUS_LOTTERY_REFERRAL_END)
+    if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_BEG)
     {
         std::vector<std::string> vLotteryPostRef;
         GetReferrers(vLotteryPost, mLotteryPostRef, vLotteryPostRef);
