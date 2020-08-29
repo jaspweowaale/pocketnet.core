@@ -885,7 +885,7 @@ bool AddrIndex::GetAddressRegistrationDate(std::vector<std::string> addresses,
                 AddressRegistrationItem(
                     itm["address"].As<string>(),
                     itm["txid"].As<string>(),
-                    itm["time"].As<time_t>()));
+                    itm["time"].As<int64_t>()));
         }
     }
     //-------------------------

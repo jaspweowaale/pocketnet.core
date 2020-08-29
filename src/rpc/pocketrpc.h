@@ -3,9 +3,11 @@
 #ifndef POCKETCOIN_RPC_POCKETNET_H
 #define POCKETCOIN_RPC_POCKETNET_H
 
-#include <univalue.h>
+#include <txmempool.h>
+//#include <univalue.h>
 #include <index/addrindex.h>
 #include <antibot/antibot.h>
 #include <rpc/server.h>
+#include <rpc/rawtransaction.h>
 
 #endif // POCKETCOIN_RPC_POCKETNET_H
