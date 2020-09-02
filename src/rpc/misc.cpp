@@ -439,6 +439,9 @@ static UniValue getnodeinfo(const JSONRPCRequest& request)
     oblock.pushKV("ntx", (int)pindex->nTx);
     
     entry.pushKV("lastblock", oblock);
+    CBlockIndex* pblockindex = chainActive[1];
+    if (IsBlockPruned(pblockindex))
+        entry.pushKV("pruned", "true");
 
     return entry;
 }

@@ -298,6 +298,7 @@ double GuessVerificationProgress(const ChainTxData& data, const CBlockIndex* pin
 /** Calculate the amount of disk space the block & undo files currently use */
 uint64_t CalculateCurrentUsage();
 
+void PruneRXData(const int nHeight);
 /**
  *  Mark one block file as pruned.
  */

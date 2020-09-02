@@ -2213,7 +2213,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
 
 	//----------------------------------------------------------------------------------
     // Check reindexer data exists and Antibot checks
-    if (!CheckBlockAdditional(pindex, block, state)) {
+    if (!IsBlockPruned(pindex) && !CheckBlockAdditional(pindex, block, state)) {
         return false;
     }
 
@@ -2294,6 +2294,7 @@ bool static FlushStateToDisk(const CChainParams& chainparams, CValidationState& 
 	static int64_t nLastFlush = 0;
 	std::set<int> setFilesToPrune;
 	bool full_flush_completed = false;
+	int pruneHeight = 0;
 	try {
 		{
 			bool fFlushForPrune = false;
@@ -2302,10 +2303,12 @@ bool static FlushStateToDisk(const CChainParams& chainparams, CValidationState& 
 			if (fPruneMode && (fCheckForPruning || nManualPruneHeight > 0) && !fReindex) {
 				if (nManualPruneHeight > 0) {
 					FindFilesToPruneManual(setFilesToPrune, nManualPruneHeight);
+					pruneHeight = nManualPruneHeight;
 				}
 				else {
 					FindFilesToPrune(setFilesToPrune, chainparams.PruneAfterHeight());
 					fCheckForPruning = false;
+					pruneHeight = chainparams.PruneAfterHeight();
 				}
 				if (!setFilesToPrune.empty()) {
 					fFlushForPrune = true;
@@ -2314,6 +2317,7 @@ bool static FlushStateToDisk(const CChainParams& chainparams, CValidationState& 
 						fHavePruned = true;
 					}
 				}
+				PruneRXData(pruneHeight);
 			}
 			int64_t nNow = GetTimeMicros();
 			// Avoid writing/flushing immediately after startup.
@@ -2362,8 +2366,9 @@ bool static FlushStateToDisk(const CChainParams& chainparams, CValidationState& 
 					}
 				}
 				// Finally remove any pruned files
-				if (fFlushForPrune)
+				if (fFlushForPrune) {
 					UnlinkPrunedFiles(setFilesToPrune);
+				}
 				nLastWrite = nNow;
 			}
 			// Flush best chain related state. This can only be done if the blocks / block index write was also done.
@@ -4490,6 +4495,33 @@ uint64_t CalculateCurrentUsage()
 		retval += file.nSize + file.nUndoSize;
 	}
 	return retval;
+}
+
+/* Prune reindexer data*/
+void PruneRXData(const int nHeight)
+{
+	try {
+            LogPrintf("Prune RI Data");
+            if (!g_pocketdb->DeleteWithCommit(reindexer::Query("UTXO").Where("block", CondLe, nHeight).Where("spent_block", CondGt, 0)).ok())
+                LogPrintf("Error prune RI data (UTXO)");
+
+            reindexer::QueryResults _posts_res;
+            if (g_pocketdb->DB()->Select(reindexer::Query("Posts").Where("block", CondLe, nHeight), _posts_res).ok()) {
+                for (auto& it : _posts_res) {
+                    reindexer::Item _post_itm = it.GetItem();
+                    if (!g_pocketdb->DeleteWithCommit(reindexer::Query("PostsHistory").Where("txidEdit", CondEq, _post_itm["txid"].As<string>())).ok())
+                        LogPrintf("Error prune RI data (PostsHistory)");
+                    if (!g_pocketdb->DeleteWithCommit(reindexer::Query("Comment").Where("postid", CondEq, _post_itm["txid"].As<string>())).ok())
+                        LogPrintf("Error prune RI data (Comment)");
+                }
+        }
+
+        if(!g_pocketdb->DeleteWithCommit(reindexer::Query("Posts").Where("block", CondLe, nHeight)).ok())
+            LogPrintf("Error prune RI data (Posts)");
+        }
+	catch (const std::exception& e) {
+		LogPrintf("%s: Prune RI data error - %s\n", __func__, e.what());
+	}
 }
 
 /* Prune a block file (modify associated database entries)*/
