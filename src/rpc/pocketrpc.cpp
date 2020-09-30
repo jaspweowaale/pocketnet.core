@@ -1391,7 +1391,7 @@ UniValue getaddressregistration(const JSONRPCRequest& request)
     for (const auto& addrReg : addrRegItems) {
         UniValue entry(UniValue::VOBJ);
         entry.pushKV("address", addrReg.address);
-        entry.pushKV("date", addrReg.time);
+        entry.pushKV("date", (int64_t)addrReg.time);
         entry.pushKV("txid", addrReg.txid);
         results.push_back(entry);
     }

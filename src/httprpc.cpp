@@ -163,26 +163,48 @@ static bool HTTPReq_JSONRPC(HTTPRequest* req, const std::string &)
         return false;
     }
 
+    std::string sMethd = "";
+    UniValue valReq;
+    try{
+        if (valReq.read(req->ReadBody())) {
+            if (valReq.isObject()) {
+                JSONRPCRequest jrq;
+                jrq.parse(valReq);
+                sMethd = jrq.strMethod;
+                //LogPrintf("Method: %s\n", sMethd);
+            }
+        }
+    } catch (const std::exception& e) {
+    }
+    const CRPCCommand* pcmd = tableRPC[sMethd];
+
     JSONRPCRequest jreq;
     jreq.peerAddr = req->GetPeer().ToString();
-    if (!RPCAuthorized(authHeader.second, jreq.authUser)) {
-        LogPrintf("ThreadRPCServer incorrect password attempt from %s\n", jreq.peerAddr);
+    //if (!RPCAuthorized(authHeader.second, jreq.authUser) & !pcmd & pcmd->category != "pocketnetrpc") {
+    if (pcmd)
+    {
+        if (pcmd->category != "pocketnetrpc")
+        {
+            if (!RPCAuthorized(authHeader.second, jreq.authUser)) {
+                LogPrintf("ThreadRPCServer incorrect password attempt from %s\n", jreq.peerAddr);
 
-        /* Deter brute-forcing
+                /* Deter brute-forcing
            If this results in a DoS the user really
            shouldn't have their RPC port exposed. */
-        MilliSleep(250);
+                MilliSleep(250);
 
-        req->WriteHeader("WWW-Authenticate", WWW_AUTH_HEADER_DATA);
-        req->WriteReply(HTTP_UNAUTHORIZED);
-        return false;
+                req->WriteHeader("WWW-Authenticate", WWW_AUTH_HEADER_DATA);
+                req->WriteReply(HTTP_UNAUTHORIZED);
+                return false;
+            }
+        }
     }
-
     try {
         // Parse request
         UniValue valRequest;
-        if (!valRequest.read(req->ReadBody()))
-            throw JSONRPCError(RPC_PARSE_ERROR, "Parse error");
+        //if (!valRequest.read(req->ReadBody()))
+        //    throw JSONRPCError(RPC_PARSE_ERROR, "Parse error");
+        valRequest = valReq;
 
         // Set the URI
         jreq.URI = req->GetURI();
