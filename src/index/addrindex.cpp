@@ -1076,13 +1076,16 @@ bool AddrIndex::GetRecommendedPostsBySubscriptions(std::string _address, int cou
 bool AddrIndex::GetRecommendedPostsByScores(std::string _address, int count, std::set<string>& recommendedPosts)
 {
     int sampleSize = 1000; // size of representative sample
+    std::vector<int> score_values;
+    score_values.push_back(4);
+    score_values.push_back(5);
 
     std::vector<std::string> userLikedPosts;
     std::vector<std::string> fellowLikers;
 
     reindexer::QueryResults queryRes1;
     reindexer::Error err = g_pocketdb->DB()->Select(
-        reindexer::Query("Scores").Where("address", CondEq, _address).Where("value", CondSet, {4, 5}).Sort("time", true).Limit(50),
+        reindexer::Query("Scores").Where("address", CondEq, _address).Where("value", CondSet, score_values).Sort("time", true).Limit(50),
         queryRes1);
     //-------------------------
     if (err.ok() && queryRes1.Count() > 0) {
@@ -1093,7 +1096,7 @@ bool AddrIndex::GetRecommendedPostsByScores(std::string _address, int count, std
 
         reindexer::QueryResults queryRes2;
         err = g_pocketdb->DB()->Select(
-            reindexer::Query("Scores").Where("posttxid", CondSet, userLikedPosts).Where("value", CondSet, {4, 5}).Limit(sampleSize),
+            reindexer::Query("Scores").Where("posttxid", CondSet, userLikedPosts).Where("value", CondSet, score_values).Limit(sampleSize),
             queryRes2);
         if (err.ok() && queryRes2.Count() > 0) {
             for (auto it : queryRes2) {
@@ -1106,7 +1109,7 @@ bool AddrIndex::GetRecommendedPostsByScores(std::string _address, int count, std
 
             reindexer::AggregationResult aggRes;
             err = g_pocketdb->SelectAggr(
-                reindexer::Query("Scores").Where("address", CondSet, fellowLikers).Where("value", CondSet, {4, 5}).Aggregate("posttxid", AggFacet),
+                reindexer::Query("Scores").Where("address", CondSet, fellowLikers).Where("value", CondSet, score_values).Aggregate("posttxid", AggFacet),
                 "posttxid",
                 aggRes);
 
