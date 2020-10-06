@@ -31,8 +31,9 @@
 #include <utilstrencodings.h>
 
 #include <memory>
-#include "index/addrindex.h"
-#include "antibot/antibot.h"
+#include <index/addrindex.h>
+#include <antibot/antibot.h>
+#include <pocketdb/pocketnet.h>
 
 #if defined(NDEBUG)
 # error "Pocketcoin cannot be compiled without assertions."
@@ -2399,7 +2400,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
 
         std::list<CTransactionRef> lRemovedTxn;
 		//----------------------
-        if (g_addrindex->IsPocketnetTransaction(rtx) && pocket_data == "") {
+        if (IsPocketnetTransaction(rtx) && pocket_data == "") {
             LogPrintf("WARNING! NetMsgType::TX Receive transaction without pocketdata: %s\n", ptx->GetHash().GetHex());
         }
 
@@ -3859,7 +3860,7 @@ bool PeerLogicValidation::SendMessages(CNode* pto)
                     }
 
 					// PocketNET transactions are minimal fee in 1 satoshi
-					if (g_addrindex->IsPocketnetTransaction(txinfo.tx)) {
+					if (IsPocketnetTransaction(txinfo.tx)) {
 						if (txinfo.feeRate.GetFeePerK() < DEFAULT_MIN_POCKETNET_TX_FEE) {
 							continue;
 						}

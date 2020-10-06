@@ -4,14 +4,14 @@
 #ifndef ADDRINDEX_H
 #define ADDRINDEX_H
 //-----------------------------------------------------
-#include "pocketdb/pocketdb.h"
-#include "pocketdb/pocketnet.h"
-#include "antibot/antibot.h"
-#include "primitives/block.h"
-#include "script/standard.h"
-#include "key_io.h"
-#include "core_io.h"
-#include "chain.h"
+#include <pocketdb/pocketdb.h>
+#include <pocketdb/pocketnet.h>
+#include <antibot/antibot.h>
+#include <primitives/block.h>
+#include <script/standard.h>
+#include <key_io.h>
+#include <core_io.h>
+#include <chain.h>
 #include <univalue.h>
 #include <coins.h>
 #include <boost/algorithm/string.hpp>
@@ -131,17 +131,6 @@ public:
     bool WriteMemRTransaction(reindexer::Item& item);
     bool WriteRTransaction(std::string table, reindexer::Item& item, int height);
 	/*
-		Find asm string with OP_RETURN for check type transaction
-	*/
-	bool FindPocketNetAsmString(const CTransactionRef& tx, std::vector<std::string>& vasm);
-    bool FindPocketNetAsmString(const CTransactionRef& tx, std::string& asmStr);
-	/*
-		Return table name for transaction if is PocketNET transaction
-	*/
-	bool GetPocketnetTXType(const CTransactionRef& tx, std::string& ri_table);
-	bool IsPocketnetTransaction(const CTransactionRef& tx);
-    bool IsPocketnetTransaction(const CTransaction& tx);
-	/*
 		Indexing block transactions.
 	*/
     bool IndexBlock(const CBlock& block, CBlockIndex* pindex);
@@ -226,7 +215,11 @@ public:
         Present reindexer::Item as UniValue for antibot check
     */
     UniValue GetUniValue(const CTransactionRef& tx, Item& item, std::string table);
-    
+    /*
+        Pruning old data
+    */
+    bool PruneDB(CBlockIndex* pindex);
+
 };
 //-----------------------------------------------------
 extern std::unique_ptr<AddrIndex> g_addrindex;

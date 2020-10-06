@@ -14,7 +14,7 @@ static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& 
     // data into the returned UniValue.
     TxToUniv(tx, uint256(), entry, true, RPCSerializationFlags());
 
-    entry.pushKV("pockettx", g_addrindex->IsPocketnetTransaction(tx));
+    entry.pushKV("pockettx", IsPocketnetTransaction(tx));
 
     if (!hashBlock.IsNull()) {
         LOCK(cs_main);

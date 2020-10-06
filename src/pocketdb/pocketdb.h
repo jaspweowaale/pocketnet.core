@@ -38,6 +38,7 @@ public:
     bool Init();
 	bool InitDB(std::string table = "ALL");
 	bool DropTable(std::string table);
+    void Reindex(std::string table = "ALL");
 
 	bool CheckIndexes(UniValue& obj);
 
@@ -60,6 +61,7 @@ public:
 	Error Delete(Query query);
 	// Delete items from query and commit
 	Error DeleteWithCommit(Query query);
+	Error DeleteWithCommit(Query query, size_t& deleted);
 
 	Error Update(std::string table, Item& item, bool commit = true);
 

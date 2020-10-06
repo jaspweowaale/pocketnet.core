@@ -29,8 +29,9 @@
 #include <queue>
 #include <utility>
 
-#include "index/addrindex.h"
-#include "antibot/antibot.h"
+#include <index/addrindex.h>
+#include <antibot/antibot.h>
+#include <pocketdb/pocketnet.h>
 
 // Unconfirmed transactions in the memory pool often depend on other
 // transactions in the memory pool. When we select transactions from the
@@ -219,7 +220,7 @@ void BlockAssembler::onlyUnconfirmed(CTxMemPool::setEntries& testSet)
 
 bool BlockAssembler::TestTransaction(CTransactionRef& tx) {
     std::string ri_table;
-    if (g_addrindex->GetPocketnetTXType(tx, ri_table)) {
+    if (GetPocketnetTXType(tx, ri_table)) {
         reindexer::Item itm;
         std::string txid = tx->GetHash().GetHex();
 
@@ -441,7 +442,7 @@ void BlockAssembler::addPackageTxs(int &nPackagesSelected, int &nDescendantsUpda
         }
 
         //---------------------------------
-        CAmount minFee = g_addrindex->IsPocketnetTransaction(iter->GetSharedTx()) ?
+        CAmount minFee = IsPocketnetTransaction(iter->GetSharedTx()) ?
             DEFAULT_MIN_POCKETNET_TX_FEE :
             blockMinFeeRate.GetFee(packageSize);
 

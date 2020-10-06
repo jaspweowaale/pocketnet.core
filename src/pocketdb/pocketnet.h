@@ -8,6 +8,7 @@
 #include <primitives/transaction.h>
 #include <core_io.h>
 #include <sstream>
+#include <rpc/rawtransaction.h>
 
 // Antibot limits
 enum Limit {
@@ -96,5 +97,20 @@ bool IsCheckpointTransaction(std::string hash);
 #define CH_CONSENSUS_LOTTERY_REFERRAL_BEG           514185
 #define CH_CONSENSUS_LOTTERY_REFERRAL_LIMITATION    1713100
 
+bool GetInputAddress(uint256 txhash, int n, std::string& address);
+bool GetTransactionData(std::string txid, std::string& address);
+bool GetTransactionData(std::string txid, std::string& address, CTransactionRef& tx);
+
+/*
+    Find asm string with OP_RETURN for check type transaction
+*/
+bool FindPocketNetAsmString(const CTransactionRef& tx, std::vector<std::string>& vasm);
+bool FindPocketNetAsmString(const CTransactionRef& tx, std::string& asmStr);
+/*
+    Return table name for transaction if is PocketNET transaction
+*/
+bool GetPocketnetTXType(const CTransactionRef& tx, std::string& ri_table);
+bool IsPocketnetTransaction(const CTransactionRef& tx);
+bool IsPocketnetTransaction(const CTransaction& tx);
 
 #endif // POCKETNET_H
