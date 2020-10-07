@@ -156,74 +156,6 @@ bool AddrIndex::indexAddress(const CTransactionRef& tx, CBlockIndex* pindex)
     return true;
 }
 
-bool AddrIndex::indexTags(const CTransactionRef& tx, CBlockIndex* pindex)
-{
-    // Check this transaction contains `Post`
-    std::string ri_table;
-    if (!GetPocketnetTXType(tx, ri_table) || ri_table != "Posts") return true;
-
-    // First get post with tags
-    reindexer::Item postItm;
-    if (!g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, tx->GetHash().GetHex()), postItm).ok()) return false;
-
-    // Parse tags and check exists
-    reindexer::VariantArray vaTags = postItm["tags"];
-    std::vector<std::string> vTags;
-    for (int i = 0; i < vaTags.size(); i++) {
-        std::string _tag = vaTags[i].As<string>();
-        if (_tag.size() > 0) {
-            reindexer::QueryResults _res;
-            g_pocketdb->Select(reindexer::Query("Tags").Where("tag", CondEq, _tag), _res);
-            if (_res.Count() > 0) {
-                for (auto& it : _res) {
-                    reindexer::Item _tagItm = it.GetItem();
-                    _tagItm["rating"] = _tagItm["rating"].As<int>() + 1;
-                    g_pocketdb->Update("Tags", _tagItm);
-                }
-            } else {
-                vTags.push_back(_tag);
-            }
-        }
-    }
-
-    // Save new
-    if (vTags.size() > 0) {
-        for (auto& it : vTags) {
-            reindexer::Item _tagItm = g_pocketdb->DB()->NewItem("Tags");
-            _tagItm["tag"] = it;
-            _tagItm["rating"] = 1;
-            g_pocketdb->Upsert("Tags", _tagItm);
-        }
-    }
-
-    return true;
-}
-
-bool AddrIndex::indexPost(const CTransactionRef& tx, CBlockIndex* pindex)
-{
-    // First get post
-    reindexer::Item postItm;
-    if (!g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, tx->GetHash().GetHex()).Where("txidEdit", CondEq, ""), postItm).ok()) {
-        if (!g_pocketdb->SelectOne(reindexer::Query("PostsHistory").Where("txid", CondEq, tx->GetHash().GetHex()).Where("txidEdit", CondEq, ""), postItm).ok()) {
-            if (!g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txidEdit", CondEq, tx->GetHash().GetHex()), postItm).ok()) {
-                if (!g_pocketdb->SelectOne(reindexer::Query("PostsHistory").Where("txidEdit", CondEq, tx->GetHash().GetHex()), postItm).ok()) {
-                    return false;
-                }
-            }
-        }
-    }
-
-
-
-
-
-
-
-
-
-
-    return true;
-}
 //-----------------------------------------------------
 // RATINGS
 //-----------------------------------------------------
@@ -472,11 +404,6 @@ bool AddrIndex::IndexBlock(const CBlock& block, CBlockIndex* pindex)
             LogPrintf("(AddrIndex::IndexBlock) indexCommentRating - tx (%s)\n", tx->GetHash().GetHex());
             return false;
         }
-        
-        if (ri_table == "Posts" && !indexPost(tx, pindex)) {
-            LogPrintf("(AddrIndex::IndexBlock) indexPost - tx (%s)\n", tx->GetHash().GetHex());
-            return false;
-        }
     }
 
     // Save ratings for users
@@ -495,6 +422,12 @@ bool AddrIndex::IndexBlock(const CBlock& block, CBlockIndex* pindex)
     if (!computeCommentRatings(pindex, commentRatings, commentReputations)) {
         LogPrintf("(AddrIndex::IndexBlock) computeCommentRatings - block (%s)\n", block.GetHash().GetHex());
         return false;
+    }
+
+    if (pindex->nHeight % 100 == 0) {
+        if (!PruneDB(pindex)) {
+            LogPrintf("(AddrIndex::PruneDB) block %s height %s\n", block.GetHash().GetHex(), pindex->nHeight);
+        }
     }
 
     return true;
@@ -1691,4 +1624,40 @@ UniValue AddrIndex::GetUniValue(const CTransactionRef& tx, Item& item, std::stri
     }
 
     return oitm;
+}
+
+bool AddrIndex::PruneDB(CBlockIndex* pindex) {
+    size_t deleted = 0;
+    LogPrintf("AddrIndex::PruneDB -> ");
+
+    // UTXO
+    if (!g_pocketdb->DeleteWithCommit(
+        reindexer::Query("UTXO")
+            .Where("block", CondLt, pindex->nHeight - 50)
+            .Not().Where("spent_block", CondEq, 0)
+    , deleted).ok()) return false;
+    LogPrintf("UTXO = %s; ", deleted);
+
+    // Scores
+    deleted = 0;
+    if (!g_pocketdb->DeleteWithCommit(
+        reindexer::Query("Scores")
+            .Where("time", CondLt, (int64_t)pindex->nTime - GetActualLimit(Limit::scores_depth_modify_reputation, pindex->nHeight))
+    , deleted).ok()) return false;
+    LogPrintf("Scores = %s; ", deleted);
+
+    // UserRatings
+    // TODO (brangr):
+
+    // PostRatings
+    // TODO (brangr):
+    
+    // CommentRatings
+    // TODO (brangr):
+
+    // Rebuild indexes after shrink
+    g_pocketdb->UpdateIndexes();
+    
+    LogPrintf("\n");
+    return true;
 }
