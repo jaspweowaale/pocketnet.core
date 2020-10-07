@@ -15,6 +15,8 @@
 #include <consensus/validation.h>
 #include <index/addrindex.h>
 #include <antibot/antibot.h>
+#include <rpc/pocketrpc.h>
+#include <pocketdb/pocketnet.h>
 #include <boost/range/adaptor/reversed.hpp>
 
 double GetPosDifficulty(const CBlockIndex* blockindex) {
@@ -543,7 +545,7 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
     // Get all users from prev block for current lottery
     for (const auto& tx : blockPrev.vtx) {
         std::vector<std::string> vasm;
-        if (!g_addrindex->FindPocketNetAsmString(tx, vasm)) continue;
+        if (!FindPocketNetAsmString(tx, vasm)) continue;
         if ((vasm[1] == OR_SCORE || vasm[1] == OR_COMMENT_SCORE) && vasm.size() >= 4) {
             std::vector<unsigned char> _data_hex = ParseHex(vasm[3]);
             std::string _data_str(_data_hex.begin(), _data_hex.end());
@@ -563,12 +565,12 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
                     if (g_pocketdb->SelectOne( reindexer::Query("Scores").Where("txid", CondEq, tx->GetHash().GetHex()), _score_itm ).ok())
                         _score_address = _score_itm["address"].As<string>();
 
-                    reindexer::Item _post_itm;
-                    if (g_pocketdb->SelectOne( reindexer::Query("Posts").Where("txid", CondEq, _score_itm["posttxid"].As<string>()), _post_itm ).ok()) 
-                        _post_address = _post_itm["address"].As<string>();
+                    // get address of post author
+                    std::string _post_txid = _score_itm["posttxid"].As<string>();
+                    GetTransactionData(_post_txid, _post_address);
                     
                     if (_score_address == "" || _post_address == "") {
-                        LogPrintf("GetRatingRewards error: _score_address='%s' _post_address='%s'\n", _score_address, _post_address);
+                        LogPrintf("GetRatingRewards error: _score_address='%s' _post_address='%s' for tx: %s\n", _score_address, _post_address, _post_txid);
                         continue;
                     }
                     
@@ -605,9 +607,9 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
                     if (g_pocketdb->SelectOne( reindexer::Query("CommentScores").Where("txid", CondEq, tx->GetHash().GetHex()), _score_itm ).ok())
                         _score_address = _score_itm["address"].As<string>();
 
-                    reindexer::Item _comment_itm;
-                    if (g_pocketdb->SelectOne( reindexer::Query("Comment").Where("txid", CondEq, _score_itm["commentid"].As<string>()), _comment_itm ).ok())
-                        _comment_address = _comment_itm["address"].As<string>();
+                    // get address of comment author
+                    std::string _comment_txid = _score_itm["commentid"].As<string>();
+                    GetTransactionData(_comment_txid, _comment_address);
                     
                     if (_score_address == "" || _comment_address == "") {
                         LogPrintf("GetRatingRewards error: _score_address='%s' _comment_address='%s'\n", _score_address, _comment_address);

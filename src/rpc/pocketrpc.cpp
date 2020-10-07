@@ -16,7 +16,7 @@ static void TxToJSON(const CTransaction& tx, const uint256 hashBlock, UniValue& 
     // data into the returned UniValue.
     TxToUniv(tx, uint256(), entry, true, RPCSerializationFlags());
 
-    entry.pushKV("pockettx", g_addrindex->IsPocketnetTransaction(tx));
+    entry.pushKV("pockettx", IsPocketnetTransaction(tx));
 
     if (!hashBlock.IsNull()) {
         LOCK(cs_main);
@@ -97,23 +97,6 @@ static UniValue _sendrawtransaction(RTransaction& rtx)
     });
 
     return hashTx.GetHex();
-}
-//----------------------------------------------------------
-
-bool GetInputAddress(uint256 txhash, int n, std::string& address)
-{
-    uint256 hash_block;
-    CTransactionRef tx;
-    //-------------------------
-    if (!GetTransaction(txhash, tx, Params().GetConsensus(), hash_block)) return false;
-    const CTxOut& txout = tx->vout[n];
-    CTxDestination destAddress;
-    const CScript& scriptPubKey = txout.scriptPubKey;
-    bool fValidAddress = ExtractDestination(scriptPubKey, destAddress);
-    if (!fValidAddress) return false;
-    address = EncodeDestination(destAddress);
-    //-------------------------
-    return true;
 }
 //----------------------------------------------------------
 std::map<std::string, UniValue> getUsersProfiles(std::vector<std::string> addresses, bool shortForm = true, int option = 0)
@@ -1332,7 +1315,7 @@ UniValue txunspent(const JSONRPCRequest& request)
         entry.pushKV("amount", ValueFromAmount(txout.nValue));
         entry.pushKV("confirmations", confirmations);
         entry.pushKV("coinbase", tx->IsCoinBase() || tx->IsCoinStake());
-        entry.pushKV("pockettx", g_addrindex->IsPocketnetTransaction(tx));
+        entry.pushKV("pockettx", IsPocketnetTransaction(tx));
         results.push_back(entry);
     }
 

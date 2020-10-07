@@ -301,7 +301,7 @@ bool AntiBot::check_score(UniValue oitm, BlockVTX& blockVtx, bool checkMempool, 
 
     // Check score to self
     bool not_found = false;
-    std::string _post_address;
+    std::string _post_address = "";
     reindexer::Item postItm;
     if (g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, _post), postItm).ok()) {
         _post_address = postItm["address"].As<string>();
@@ -325,6 +325,16 @@ bool AntiBot::check_score(UniValue oitm, BlockVTX& blockVtx, bool checkMempool, 
                     break;
                 }
             }
+        }
+        else {
+            CTransactionRef tx;
+            GetTransactionData(_post, _post_address, tx);
+
+            std::string ri_table = "";
+            GetPocketnetTXType(tx, ri_table);
+
+            if (_post_address != "" && ri_table == OR_POST)
+                not_found = false;
         }
 
         if (not_found) {
@@ -446,11 +456,7 @@ bool AntiBot::check_complain(UniValue oitm, BlockVTX& blockVtx, bool checkMempoo
     // Check score to self
     bool not_found = false;
     reindexer::Item postItm;
-    if (g_pocketdb->SelectOne(
-        reindexer::Query("Posts")
-        .Where("txid", CondEq, _post),
-        postItm
-    ).ok()) {
+    if (g_pocketdb->SelectOne(reindexer::Query("Posts").Where("txid", CondEq, _post), postItm).ok()) {
         // Score to self post
         if (postItm["address"].As<string>() == _address) {
             result = ANTIBOTRESULT::SelfComplain;
@@ -469,6 +475,17 @@ bool AntiBot::check_complain(UniValue oitm, BlockVTX& blockVtx, bool checkMempoo
                     break;
                 }
             }
+        }
+        else {
+            std::string _post_address = "";
+            CTransactionRef tx;
+            GetTransactionData(_post, _post_address, tx);
+
+            std::string ri_table = "";
+            GetPocketnetTXType(tx, ri_table);
+
+            if (_post_address != "" && ri_table == OR_POST)
+                not_found = false;
         }
 
         if (not_found) {
@@ -821,6 +838,7 @@ bool AntiBot::check_comment(UniValue oitm, BlockVTX& blockVtx, bool checkMempool
         return false;
     }
 
+    // Post exists?
     Item post_itm;
     if (_postid == "" || !g_pocketdb->SelectOne(Query("Posts").Where("txid", CondEq, _postid), post_itm).ok()) {
         result = ANTIBOTRESULT::NotFound;

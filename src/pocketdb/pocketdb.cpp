@@ -119,6 +119,47 @@ bool PocketDB::Init()
     return true;
 }
 
+void PocketDB::Reindex(std::string table)
+{
+    if (table == "Posts" || table == "ALL") {
+        db->UpdateIndex("Posts", {"txid", "hash", "string", IndexOpts().PK()});
+        db->UpdateIndex("Posts", {"txidEdit", "hash", "string", IndexOpts()});
+        db->UpdateIndex("Posts", {"txidRepost", "hash", "string", IndexOpts()});
+        db->UpdateIndex("Posts", {"block", "tree", "int", IndexOpts()});
+        db->UpdateIndex("Posts", {"time", "tree", "int64", IndexOpts()});
+        db->UpdateIndex("Posts", {"address", "hash", "string", IndexOpts()});
+        db->UpdateIndex("Posts", {"type", "tree", "int", IndexOpts()});
+        db->UpdateIndex("Posts", {"lang", "-", "string", IndexOpts()});
+        db->UpdateIndex("Posts", {"caption", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->UpdateIndex("Posts", {"caption_", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->UpdateIndex("Posts", {"message", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->UpdateIndex("Posts", {"message_", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->UpdateIndex("Posts", {"tags", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
+        db->UpdateIndex("Posts", {"url", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->UpdateIndex("Posts", {"images", "-", "string", IndexOpts().Array().SetCollateMode(CollateUTF8)});
+        db->UpdateIndex("Posts", {"settings", "-", "string", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->UpdateIndex("Posts", {"scoreSum", "-", "int", IndexOpts()});
+        db->UpdateIndex("Posts", {"scoreCnt", "-", "int", IndexOpts()});
+        db->UpdateIndex("Posts", {"reputation", "-", "int", IndexOpts()});
+        db->UpdateIndex("Posts", {"caption+message", {"caption_", "message_"}, "text", "composite", IndexOpts().SetCollateMode(CollateUTF8)});
+        db->Commit("Posts");
+    }
+
+    if (table == "UTXO" || table == "ALL") {
+        db->UpdateIndex("UTXO", {"txid", "-", "string", IndexOpts()});
+        db->UpdateIndex("UTXO", {"txout", "-", "int", IndexOpts()});
+        db->UpdateIndex("UTXO", {"time", "-", "int64", IndexOpts()});
+        db->UpdateIndex("UTXO", {"block", "tree", "int", IndexOpts()});
+        db->UpdateIndex("UTXO", {"address", "hash", "string", IndexOpts()});
+        db->UpdateIndex("UTXO", {"amount", "-", "int64", IndexOpts()});
+        db->UpdateIndex("UTXO", {"spent_block", "tree", "int", IndexOpts()});
+        db->UpdateIndex("UTXO", {"txid+txout", {"txid", "txout"}, "hash", "composite", IndexOpts().PK()});
+        db->Commit("UTXO");
+    }
+
+    LogPrintf("Reindexer reindex indexes!\n");
+}
+
 bool PocketDB::InitDB(std::string table)
 {
     // Service
@@ -394,6 +435,8 @@ bool PocketDB::InitDB(std::string table)
         db->Commit("CommentScores");
     }
 
+    Reindex();
+
     return true;
 }
 
@@ -647,6 +690,7 @@ Error PocketDB::DeleteWithCommit(Query query, size_t& deleted)
     deleted = res.Count();
 
     if (err.ok()) {
+        deleted = res.Count();
         return db->Commit(query._namespace);
     }
     
