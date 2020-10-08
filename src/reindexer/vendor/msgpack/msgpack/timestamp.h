@@ -10,7 +10,7 @@
 #ifndef MSGPACK_TIMESTAMP_H
 #define MSGPACK_TIMESTAMP_H
 
-#include <msgpack/object.h>
+#include <msgpack/msgpack/object.h>
 
 #ifdef __cplusplus
 extern "C" {

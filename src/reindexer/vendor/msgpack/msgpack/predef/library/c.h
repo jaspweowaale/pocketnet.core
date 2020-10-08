@@ -10,12 +10,12 @@ http://www.boost.org/LICENSE_1_0.txt)
 #define MSGPACK_PREDEF_LIBRARY_C_H
 #endif
 
-#include <msgpack/predef/library/c/_prefix.h>
+#include <msgpack/msgpack/predef/library/c/_prefix.h>
 
-#include <msgpack/predef/library/c/cloudabi.h>
-#include <msgpack/predef/library/c/gnu.h>
-#include <msgpack/predef/library/c/uc.h>
-#include <msgpack/predef/library/c/vms.h>
-#include <msgpack/predef/library/c/zos.h>
+#include <msgpack/msgpack/predef/library/c/cloudabi.h>
+#include <msgpack/msgpack/predef/library/c/gnu.h>
+#include <msgpack/msgpack/predef/library/c/uc.h>
+#include <msgpack/msgpack/predef/library/c/vms.h>
+#include <msgpack/msgpack/predef/library/c/zos.h>
 
 #endif

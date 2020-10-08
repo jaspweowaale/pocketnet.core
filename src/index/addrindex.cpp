@@ -917,7 +917,7 @@ bool AddrIndex::GetRecomendedSubscriptions(std::string _address, int count, std:
 
             reindexer::AggregationResult aggRes;
             err = g_pocketdb->SelectAggr(
-                reindexer::Query("SubscribesView").Where("address", CondSet, fellowSubscribers).Where("private", CondEq, false).Aggregate("address_to", AggFacet),
+                reindexer::Query("SubscribesView").Where("address", CondSet, fellowSubscribers).Where("private", CondEq, false).Aggregate(AggFacet, {"address_to"}),
                 "address_to",
                 aggRes);
 
@@ -932,7 +932,7 @@ bool AddrIndex::GetRecomendedSubscriptions(std::string _address, int count, std:
                 // Get SUM of all "count" in aggRes.facets - freqInDoc
                 for (const auto& f : aggRes.facets) {
                     freqInDoc += f.count;
-                    popularSubscribtions.push_back(f.value);
+                    popularSubscribtions.push_back(f.values[0]);
                 }
 
                 // Find CondSet those addresses in UserReputations
@@ -960,9 +960,9 @@ bool AddrIndex::GetRecomendedSubscriptions(std::string _address, int count, std:
                 std::vector<std::pair<std::string, double>> mapPopularSubscriptions;
                 for (const auto& f : aggRes.facets) {
                     double val = 0;
-                    if (freqInCorpus > 0 && popularSubscribtionsRate[f.value] != 0) val = f.count / freqInDoc * std::log(freqInCorpus / popularSubscribtionsRate[f.value]); // TF - IDF
+                    if (freqInCorpus > 0 && popularSubscribtionsRate[f.values[0]] != 0) val = f.count / freqInDoc * std::log(freqInCorpus / popularSubscribtionsRate[f.values[0]]); // TF - IDF
                     if (freqInCorpus == 0) val = f.count;                                                                                                                   // Else - sort as is - without TF - IDF tuning
-                    mapPopularSubscriptions.push_back(std::pair<std::string, double>(f.value, val));
+                    mapPopularSubscriptions.push_back(std::pair<std::string, double>(f.values[0], val));
                 }
                 // ---------------------
                 struct IntCmp {
@@ -1042,7 +1042,7 @@ bool AddrIndex::GetRecommendedPostsByScores(std::string _address, int count, std
 
             reindexer::AggregationResult aggRes;
             err = g_pocketdb->SelectAggr(
-                reindexer::Query("Scores").Where("address", CondSet, fellowLikers).Where("value", CondSet, score_values).Aggregate("posttxid", AggFacet),
+                reindexer::Query("Scores").Where("address", CondSet, fellowLikers).Where("value", CondSet, score_values).Aggregate(AggFacet, { "posttxid" }),
                 "posttxid",
                 aggRes);
 
@@ -1060,8 +1060,8 @@ bool AddrIndex::GetRecommendedPostsByScores(std::string _address, int count, std
                 std::partial_sort(vecFacets.begin(), vecFacets.begin() + limit, vecFacets.end(), IntCmp());
 
                 for (int i = 0; i < limit; ++i) {
-                    if (std::find(userLikedPosts.begin(), userLikedPosts.end(), vecFacets[i].value) == userLikedPosts.end()) {
-                        recommendedPosts.emplace(vecFacets[i].value);
+                    if (std::find(userLikedPosts.begin(), userLikedPosts.end(), vecFacets[i].values[0]) == userLikedPosts.end()) {
+                        recommendedPosts.emplace(vecFacets[i].values[0]);
                         // TODO we'll skip own liked posts so there can be less than 10
                     }
                 }

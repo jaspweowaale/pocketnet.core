@@ -10,7 +10,6 @@
 #include "core/transactionimpl.h"
 #include "debug/allocdebug.h"
 #include "estl/syncpool.h"
-#include "reindexer_version.h"
 #include "resultserializer.h"
 #include "tools/logger.h"
 #include "tools/semversion.h"

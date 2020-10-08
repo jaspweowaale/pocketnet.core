@@ -8,8 +8,8 @@ http://www.boost.org/LICENSE_1_0.txt)
 #ifndef MSGPACK_PREDEF_OS_VMS_H
 #define MSGPACK_PREDEF_OS_VMS_H
 
-#include <msgpack/predef/version_number.h>
-#include <msgpack/predef/make.h>
+#include <msgpack/msgpack/predef/version_number.h>
+#include <msgpack/msgpack/predef/make.h>
 
 /*`
 [heading `MSGPACK_OS_VMS`]
@@ -48,5 +48,5 @@ http://www.boost.org/LICENSE_1_0.txt)
 
 #endif
 
-#include <msgpack/predef/detail/test.h>
+#include <msgpack/msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_OS_VMS,MSGPACK_OS_VMS_NAME)

@@ -9,10 +9,10 @@
 #ifndef MSGPACK_PREDEF_LIBRARY_C_CLOUDABI_H
 #define MSGPACK_PREDEF_LIBRARY_C_CLOUDABI_H
 
-#include <msgpack/predef/version_number.h>
-#include <msgpack/predef/make.h>
+#include <msgpack/msgpack/predef/version_number.h>
+#include <msgpack/msgpack/predef/make.h>
 
-#include <msgpack/predef/library/c/_prefix.h>
+#include <msgpack/msgpack/predef/library/c/_prefix.h>
 
 #if defined(__CloudABI__)
 #include <stddef.h>
@@ -49,5 +49,5 @@ Version number available as major, and minor.
 
 #endif
 
-#include <msgpack/predef/detail/test.h>
+#include <msgpack/msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_LIB_C_CLOUDABI,MSGPACK_LIB_C_CLOUDABI_NAME)

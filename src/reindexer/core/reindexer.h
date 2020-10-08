@@ -1,5 +1,9 @@
 #pragma once
 
+#ifndef REINDEX_VERSION
+#define REINDEX_VERSION "2.13.0"
+#endif
+
 #include "core/namespacedef.h"
 #include "core/query/query.h"
 #include "core/queryresults/queryresults.h"

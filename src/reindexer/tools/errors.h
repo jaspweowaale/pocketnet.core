@@ -5,6 +5,10 @@
 #include "estl/intrusive_ptr.h"
 #include "estl/string_view.h"
 
+#ifndef REINDEX_CORE_BUILD
+#define REINDEX_CORE_BUILD 1
+#endif
+
 #ifdef REINDEX_CORE_BUILD
 #include "spdlog/fmt/bundled/printf.h"
 #include "spdlog/fmt/fmt.h"
