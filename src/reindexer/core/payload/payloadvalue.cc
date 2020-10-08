@@ -15,7 +15,7 @@ PayloadValue::PayloadValue(size_t size, const uint8_t *ptr, size_t cap) : p_(nul
 
 PayloadValue::PayloadValue(const PayloadValue &other) : p_(other.p_) {
 	if (p_) {
-		header()->refcount.fetch_add(1);
+		header()->refcount.fetch_add(1, std::memory_order_relaxed);
 	}
 }
 
@@ -28,13 +28,13 @@ uint8_t *PayloadValue::alloc(size_t cap) {
 	nheader->cap = cap;
 	if (p_) {
 		nheader->lsn = header()->lsn;
-	}
-
+	} else
+		nheader->lsn = -1;
 	return pn;
 }
 
 void PayloadValue::release() {
-	if (p_ && header()->refcount.fetch_sub(1) == 1) {
+	if (p_ && header()->refcount.fetch_sub(1, std::memory_order_acq_rel) == 1) {
 		header()->~dataHeader();
 		delete p_;
 	}

@@ -461,16 +461,16 @@ Iterator &Iterator::operator=(const Iterator &it) {
 }
 
 std::pair<const std::string &, Node &> Iterator::operator*() {
-    static const std::string emptyStr;
-    switch (m_Type) {
-    case SequenceType:
-        return {emptyStr, *(static_cast<SequenceIteratorImp*>(m_pImp)->m_Iterator->second)};
-        break;
-    case MapType:
-        return {static_cast<MapIteratorImp*>(m_pImp)->m_Iterator->first, *(static_cast<MapIteratorImp*>(m_pImp)->m_Iterator->second)};
-        break;
-    default:
-        break;
+	static const std::string emptyStr;
+	switch (m_Type) {
+		case SequenceType:
+			return {emptyStr, *(static_cast<SequenceIteratorImp *>(m_pImp)->m_Iterator->second)};
+			break;
+		case MapType:
+			return {static_cast<MapIteratorImp *>(m_pImp)->m_Iterator->first, *(static_cast<MapIteratorImp *>(m_pImp)->m_Iterator->second)};
+			break;
+		default:
+			break;
 	}
 
 	g_NoneNode.Clear();

@@ -1,10 +1,10 @@
 #pragma once
 
-#include <climits>
 #include <functional>
 #include <initializer_list>
-#include "querywhere.h"
+#include "queryentry.h"
 #include "tools/errors.h"
+#include "tools/stringstools.h"
 
 /// @namespace reindexer
 /// The base namespace
@@ -12,12 +12,15 @@ namespace reindexer {
 
 class WrSerializer;
 class Serializer;
+class JoinedQuery;
+
 using std::initializer_list;
+using std::pair;
 
 /// @class Query
 /// Allows to select data from DB.
 /// Analog to ansi-sql select query.
-class Query : public QueryWhere {
+class Query {
 public:
 	/// Creates an object for certain namespace with appropriate settings.
 	/// @param nsName - name of the namespace the data to be selected from.
@@ -34,18 +37,25 @@ public:
 
 	/// Parses pure sql select query and initializes Query object data members as a result.
 	/// @param q - sql query.
-	/// @return always returns 0.
-	int FromSQL(const string_view &q);
-
-	/// Parses JSON dsl set.
-	/// @param dsl - dsl set.
-	/// @return always returns errOk or throws an exception.
-	Error ParseJson(const string &dsl);
+	void FromSQL(const string_view &q);
 
 	/// Logs query in 'Select field1, ... field N from namespace ...' format.
 	/// @param ser - serializer to store SQL string
 	/// @param stripArgs - replace condition values with '?'
 	WrSerializer &GetSQL(WrSerializer &ser, bool stripArgs = false) const;
+
+	/// Logs query in 'Select field1, ... field N from namespace ...' format.
+	/// @param stripArgs - replace condition values with '?'
+	/// @return Query in SQL format
+	string GetSQL(bool stripArgs = false) const;
+
+	/// Parses JSON dsl set.
+	/// @param dsl - dsl set.
+	/// @return always returns errOk or throws an exception.
+	Error FromJSON(const string &dsl);
+
+	/// returns structure of a query in JSON dsl format
+	string GetJSON() const;
 
 	/// Enable explain query
 	/// @param on - signaling on/off
@@ -72,12 +82,11 @@ public:
 	/// @return Query object ready to be executed.
 	template <typename T>
 	Query &Where(const string &idx, CondType cond, std::initializer_list<T> l) {
-		entries.resize(entries.size() + 1);
-		QueryEntry &qe = entries.back();
+		QueryEntry qe;
 		qe.condition = cond;
 		qe.index = idx;
-		qe.op = nextOp_;
 		for (auto it = l.begin(); it != l.end(); it++) qe.values.push_back(Variant(*it));
+		entries.Append(nextOp_, std::move(qe));
 		nextOp_ = OpAnd;
 		return *this;
 	}
@@ -89,13 +98,12 @@ public:
 	/// @return Query object ready to be executed.
 	template <typename T>
 	Query &Where(const string &idx, CondType cond, const std::vector<T> &l) {
-		entries.resize(entries.size() + 1);
-		QueryEntry &qe = entries.back();
+		QueryEntry qe;
 		qe.condition = cond;
 		qe.index = idx;
-		qe.op = nextOp_;
 		qe.values.reserve(l.size());
 		for (auto it = l.begin(); it != l.end(); it++) qe.values.push_back(Variant(*it));
+		entries.Append(nextOp_, std::move(qe));
 		nextOp_ = OpAnd;
 		return *this;
 	}
@@ -106,13 +114,12 @@ public:
 	/// @param l - vector of index values to be compared with.
 	/// @return Query object ready to be executed.
 	Query &Where(const string &idx, CondType cond, const VariantArray &l) {
-		entries.resize(entries.size() + 1);
-		QueryEntry &qe = entries.back();
+		QueryEntry qe;
 		qe.condition = cond;
 		qe.index = idx;
-		qe.op = nextOp_;
 		qe.values.reserve(l.size());
 		for (auto it = l.begin(); it != l.end(); it++) qe.values.push_back(Variant(*it));
+		entries.Append(nextOp_, std::move(qe));
 		nextOp_ = OpAnd;
 		return *this;
 	}
@@ -129,29 +136,109 @@ public:
 	/// belongs to "price" indexes.
 	/// @return Query object ready to be executed.
 	Query &WhereComposite(const string &idx, CondType cond, initializer_list<VariantArray> l) {
-		entries.resize(entries.size() + 1);
-		QueryEntry &qe = entries.back();
+		QueryEntry qe;
 		qe.condition = cond;
 		qe.index = idx;
-		qe.op = nextOp_;
 		qe.values.reserve(l.size());
 		for (auto it = l.begin(); it != l.end(); it++) {
 			qe.values.push_back(Variant(*it));
 		}
+		entries.Append(nextOp_, std::move(qe));
 		nextOp_ = OpAnd;
 		return *this;
 	}
 	Query &WhereComposite(const string &idx, CondType cond, const vector<VariantArray> &v) {
-		entries.resize(entries.size() + 1);
-		QueryEntry &qe = entries.back();
+		QueryEntry qe;
 		qe.condition = cond;
 		qe.index = idx;
-		qe.op = nextOp_;
 		qe.values.reserve(v.size());
 		for (auto it = v.begin(); it != v.end(); it++) {
 			qe.values.push_back(Variant(*it));
 		}
+		entries.Append(nextOp_, std::move(qe));
 		nextOp_ = OpAnd;
+		return *this;
+	}
+
+	/// Sets a new value for a field.
+	/// @param field - field name.
+	/// @param value - new value.
+	/// @param hasExpressions - true: value has expresions in it
+	template <typename ValueType>
+	Query &Set(string field, ValueType value, bool hasExpressions = false) {
+		return Set(std::move(field), {value}, hasExpressions);
+	}
+	/// Sets a new value for a field.
+	/// @param field - field name.
+	/// @param l - new value.
+	/// @param hasExpressions - true: value has expresions in it
+	template <typename ValueType>
+	Query &Set(string field, std::initializer_list<ValueType> l, bool hasExpressions = false) {
+		VariantArray value;
+		value.reserve(l.size());
+		for (auto it = l.begin(); it != l.end(); it++) value.emplace_back(*it);
+		return Set(std::move(field), std::move(value), hasExpressions);
+	}
+	/// Sets a new value for a field.
+	/// @param field - field name.
+	/// @param l - new value.
+	/// @param hasExpressions - true: value has expresions in it
+	template <typename T>
+	Query &Set(string field, const std::vector<T> &l, bool hasExpressions = false) {
+		VariantArray value;
+		value.reserve(l.size());
+		value.MarkArray();
+		for (auto it = l.begin(); it != l.end(); it++) value.emplace_back(*it);
+		return Set(std::move(field), std::move(value), hasExpressions);
+	}
+	/// Sets a new value for a field.
+	/// @param field - field name.
+	/// @param value - new value.
+	/// @param hasExpressions - true: value has expresions in it
+	Query &Set(string field, VariantArray value, bool hasExpressions = false) {
+		updateFields_.emplace_back(std::move(field), std::move(value), FieldModeSet, hasExpressions);
+		return *this;
+	}
+	/// Sets a value for a field as an object.
+	/// @param field - field name.
+	/// @param value - new value.
+	/// @param hasExpressions - true: value has expresions in it
+	template <typename ValueType>
+	Query &SetObject(string field, ValueType value, bool hasExpressions = false) {
+		return SetObject(std::move(field), {value}, hasExpressions);
+	}
+	/// Sets a new value for a field as an object.
+	/// @param field - field name.
+	/// @param l - new value.
+	/// @param hasExpressions - true: value has expresions in it
+	template <typename ValueType>
+	Query &SetObject(string field, std::initializer_list<ValueType> l, bool hasExpressions = false) {
+		VariantArray value;
+		value.reserve(l.size());
+		for (auto it = l.begin(); it != l.end(); it++) value.emplace_back(Variant(*it));
+		return SetObject(std::move(field), std::move(value), hasExpressions);
+	}
+	/// Sets a new value for a field as an object.
+	/// @param field - field name.
+	/// @param l - new value.
+	/// @param hasExpressions - true: value has expresions in it
+	template <typename T>
+	Query &SetObject(string field, const std::vector<T> &l, bool hasExpressions = false) {
+		VariantArray value;
+		value.reserve(l.size());
+		value.MarkArray();
+		for (auto it = l.begin(); it != l.end(); it++) value.emplace_back(Variant(*it));
+		return SetObject(std::move(field), std::move(value), hasExpressions);
+	}
+	/// Sets a value for a field as an object.
+	/// @param field - field name.
+	/// @param value - new value.
+	/// @param hasExpressions - true: value has expresions in it
+	Query &SetObject(string field, VariantArray value, bool hasExpressions = false);
+	/// Drops a value for a field.
+	/// @param field - field name.
+	Query &Drop(string field) {
+		updateFields_.emplace_back(std::move(field), VariantArray(), FieldModeDrop);
 		return *this;
 	}
 
@@ -162,10 +249,12 @@ public:
 	/// Adds equal position fields to arrays queries.
 	/// @param equalPosition - list of fields with equal array index position.
 	void AddEqualPosition(const h_vector<string> &equalPosition) {
-		equalPositions_.push_back(determineEqualPositionIndexes(equalPosition));
+		equalPositions_.emplace(entries.DetermineEqualPositionIndexes(equalPosition));
 	}
-	void AddEqualPosition(const vector<string> &equalPosition) { equalPositions_.push_back(determineEqualPositionIndexes(equalPosition)); }
-	void AddEqualPosition(std::initializer_list<string> l) { equalPositions_.push_back(determineEqualPositionIndexes(l)); }
+	void AddEqualPosition(const vector<string> &equalPosition) {
+		equalPositions_.emplace(entries.DetermineEqualPositionIndexes(equalPosition));
+	}
+	void AddEqualPosition(std::initializer_list<string> l) { equalPositions_.emplace(entries.DetermineEqualPositionIndexes(l)); }
 
 	/// Joins namespace with another namespace. Analog to sql JOIN.
 	/// @param joinType - type of Join (Inner, Left or OrInner).
@@ -175,17 +264,7 @@ public:
 	/// @param op - operation type (and, or, not).
 	/// @param qr - query of the namespace that is going to be joined with this one.
 	/// @return Query object ready to be executed.
-	Query &Join(JoinType joinType, const string &index, const string &joinIndex, CondType cond, OpType op, Query &qr) {
-		QueryJoinEntry joinEntry;
-		joinEntry.op_ = op;
-		joinEntry.condition_ = cond;
-		joinEntry.index_ = index;
-		joinEntry.joinIndex_ = joinIndex;
-		qr.joinType = joinType;
-		qr.joinEntries_.push_back(joinEntry);
-		joinQueries_.push_back(qr);
-		return *this;
-	}
+	Query &Join(JoinType joinType, const string &index, const string &joinIndex, CondType cond, OpType op, const Query &qr);
 
 	/// @public
 	/// Inner Join of this namespace with another one.
@@ -194,7 +273,7 @@ public:
 	/// @param cond - condition type (Eq, Leq, Geq, etc).
 	/// @param qr - query of the namespace that is going to be joined with this one.
 	/// @return Query object ready to be executed.
-	Query &InnerJoin(const string &index, const string &joinIndex, CondType cond, Query &qr) {
+	Query &InnerJoin(const string &index, const string &joinIndex, CondType cond, const Query &qr) {
 		return Join(JoinType::InnerJoin, index, joinIndex, cond, OpAnd, qr);
 	}
 
@@ -204,7 +283,7 @@ public:
 	/// @param cond - condition type (Eq, Leq, Geq, etc).
 	/// @param qr - query of the namespace that is going to be joined with this one.
 	/// @return Query object ready to be executed.
-	Query &LeftJoin(const string &index, const string &joinIndex, CondType cond, Query &qr) {
+	Query &LeftJoin(const string &index, const string &joinIndex, CondType cond, const Query &qr) {
 		return Join(JoinType::LeftJoin, index, joinIndex, cond, OpAnd, qr);
 	}
 
@@ -213,13 +292,9 @@ public:
 	/// @param joinIndex - name of the field in the namespace of qr Query object.
 	/// @param cond - condition type (Eq, Leq, Geq, etc).
 	/// @param qr - query of the namespace that is going to be joined with this one.
-	/// @return Not a reference to a query object ready to be executed.
-	Query OrInnerJoin(const string &index, const string &joinIndex, CondType cond, Query &qr) {
-		Query &joinQr = Join(JoinType::OrInnerJoin, index, joinIndex, cond, OpAnd, qr);
-		joinQr.nextOp_ = OpOr;
-		Query innerJoinQr(joinQr);
-		joinQr.nextOp_ = OpAnd;
-		return innerJoinQr;
+	/// @return a reference to a query object ready to be executed.
+	Query &OrInnerJoin(const string &index, const string &joinIndex, CondType cond, const Query &qr) {
+		return Join(JoinType::OrInnerJoin, index, joinIndex, cond, OpAnd, qr);
 	}
 
 	/// Changes debug level.
@@ -227,6 +302,14 @@ public:
 	/// @return Query object.
 	Query &Debug(int level) {
 		debugLevel = level;
+		return *this;
+	}
+
+	/// Changes strict mode.
+	/// @param mode - strict mode.
+	/// @return Query object.
+	Query &Strict(StrictMode mode) {
+		strictMode = mode;
 		return *this;
 	}
 
@@ -239,14 +322,38 @@ public:
 		return *this;
 	}
 
+	/// Performs sorting by certain column. Analog to sql ORDER BY.
+	/// @param sort - sorting column name.
+	/// @param desc - is sorting direction descending or ascending.
+	/// @param forcedSortOrder - list of values for forced sort order.
+	/// @return Query object.
+	template <typename T>
+	Query &Sort(const string &sort, bool desc, initializer_list<T> forcedSortOrder) {
+		if (!forcedSortOrder_.empty()) throw Error(errParams, "Allowed only one forced sort order");
+		sortingEntries_.push_back({sort, desc});
+		for (const T &v : forcedSortOrder) forcedSortOrder_.emplace_back(v);
+		return *this;
+	}
+
+	/// Performs sorting by certain column. Analog to sql ORDER BY.
+	/// @param sort - sorting column name.
+	/// @param desc - is sorting direction descending or ascending.
+	/// @param forcedSortOrder - list of values for forced sort order.
+	/// @return Query object.
+	template <typename T>
+	Query &Sort(const string &sort, bool desc, const T &forcedSortOrder) {
+		if (!forcedSortOrder_.empty()) throw Error(errParams, "Allowed only one forced sort order");
+		sortingEntries_.push_back({sort, desc});
+		for (const auto &v : forcedSortOrder) forcedSortOrder_.emplace_back(v);
+		return *this;
+	}
+
 	/// Performs distinct for a certain index.
 	/// @param indexName - name of index for distict operation.
 	Query &Distinct(const string &indexName) {
 		if (indexName.length()) {
-			QueryEntry qentry;
-			qentry.index = indexName;
-			qentry.distinct = true;
-			entries.push_back(qentry);
+			AggregateEntry aggEntry{AggDistinct, {indexName}};
+			aggregations_.emplace_back(std::move(aggEntry));
 		}
 		return *this;
 	}
@@ -256,15 +363,25 @@ public:
 	Query &Select(std::initializer_list<const char *> l) {
 		selectFilter_.insert(selectFilter_.begin(), l.begin(), l.end());
 		return *this;
-	};
+	}
 
 	/// Adds an aggregate function for certain column.
 	/// Analog to sql aggregate functions (min, max, avg, etc).
-	/// @param idx - name of the field to be aggregated.
 	/// @param type - aggregation function type (Sum, Avg).
+	/// @param fields - names of the fields to be aggregated.
+	/// @param sort - vector of sorting column names and descending (if true) or ascending (otherwise) flags.
+	/// Use column name 'count' to sort by facet's count value.
+	/// @param limit - number of rows to get from result set.
+	/// @param offset - index of the first row to get from result set.
 	/// @return Query object ready to be executed.
-	Query &Aggregate(const string &idx, AggType type) {
-		aggregations_.push_back({idx, type});
+	Query &Aggregate(AggType type, const h_vector<string, 1> &fields, const vector<pair<string, bool>> &sort = {},
+					 unsigned limit = UINT_MAX, unsigned offset = 0) {
+		AggregateEntry aggEntry{type, fields, limit, offset};
+		aggEntry.sortingEntries_.reserve(sort.size());
+		for (const auto &s : sort) {
+			aggEntry.sortingEntries_.push_back({s.first, s.second});
+		}
+		aggregations_.push_back(aggEntry);
 		return *this;
 	}
 
@@ -279,6 +396,21 @@ public:
 	/// @return Query object.
 	Query &Not() {
 		nextOp_ = OpNot;
+		return *this;
+	}
+
+	/// Insert open bracket to order logic operations.
+	/// @return Query object.
+	Query &OpenBracket() {
+		entries.OpenBracket(nextOp_);
+		nextOp_ = OpAnd;
+		return *this;
+	}
+
+	/// Insert close bracket to order logic operations.
+	/// @return Query object.
+	Query &CloseBracket() {
+		entries.CloseBracket();
 		return *this;
 	}
 
@@ -315,6 +447,15 @@ public:
 		return *this;
 	}
 
+	/// Output fulltext rank
+	/// Allowed only with fulltext query
+	/// @return Query object
+	Query &WithRank() noexcept {
+		withRank_ = true;
+		return *this;
+	}
+	bool IsWithRank() const noexcept { return withRank_; }
+
 	/// Serializes query data to stream.
 	/// @param ser - serializer object for write.
 	/// @param mode - serialization mode.
@@ -324,127 +465,56 @@ public:
 	/// @param ser - serializer object.
 	void Deserialize(Serializer &ser);
 
-	/// returns structure of a query in JSON format
-	string GetJSON() const;
+	void WalkNested(bool withSelf, bool withMerged, std::function<void(const Query &q)> visitor) const;
 
-	/// Get  readaby Join Type
-	/// @param type - join tyoe
-	/// @return string with join type name
-	static const char *JoinTypeName(JoinType type);
+	bool HasLimit() const noexcept { return count != UINT_MAX; }
+	bool HasOffset() const noexcept { return start != 0; }
+	bool IsWALQuery() const noexcept;
+	const h_vector<UpdateEntry, 0> &UpdateFields() const noexcept { return updateFields_; }
 
-	void WalkNested(bool withSelf, bool withMerged, std::function<void(const Query &q)> visitor) const {
-		if (withSelf) visitor(*this);
-		if (withMerged)
-			for (auto &mq : mergeQueries_) visitor(mq);
-		for (auto &jq : joinQueries_) visitor(jq);
-		for (auto &mq : mergeQueries_)
-			for (auto &jq : mq.joinQueries_) visitor(jq);
-	}
+	QueryType Type() const { return type_; }
 
 protected:
-	/// Parses query.
-	/// @param tok - tokenizer object instance.
-	/// @return always returns zero.
-	int Parse(tokenizer &tok);
-
-	/// Parses filter part of sql query.
-	/// @param tok - tokenizer object instance.
-	/// @return always returns zero.
-	int selectParse(tokenizer &tok);
-
-	/// Parses JSON dsl set.
-	/// @param dsl - dsl set.
-	void parseJson(const string &dsl);
-
-	/// Deserializes query data from stream.
-	/// @param ser - serializer object.
-	void deserialize(Serializer &ser);
-
-	/// Parse join entries
-	void parseJoin(JoinType type, tokenizer &tok);
-
-	/// Parse join entries
-	void parseJoinEntries(tokenizer &tok, const string &mainNs);
-
-	/// Parse merge entries
-	void parseMerge(tokenizer &parser);
-
-	/// Calculates QueryEntries indexes for EqualPosition context.
-	/// @param fields - equal position context.
-	template <typename T>
-	EqualPosition determineEqualPositionIndexes(const T &fields) {
-		EqualPosition ep;
-		for (size_t i = 0; i < entries.size(); ++i) {
-			for (auto it = fields.begin(); it != fields.end(); ++it)
-				if (entries[i].index == *it) {
-					ep.push_back(i);
-					break;
-				}
-		}
-		if (fields.size() < 2) throw Error(errLogic, "Amount of fields with equal index position should be 2 or more!");
-		return ep;
-	}
-
-	/// Builds print version of a query with join in sql format.
-	/// @param ser - serializer to store SQL string
-	/// @param stripArgs - replace condition values with '?'
-	void dumpJoined(WrSerializer &ser, bool stripArgs) const;
-
-	/// Builds a print version of a query with merge queries in sql format.
-	/// @param ser - serializer to store SQL string
-	/// @param stripArgs - replace condition values with '?'
-	void dumpMerged(WrSerializer &ser, bool stripArgs) const;
-
-	/// Builds a print version of a query's order by statement
-	/// @param ser - serializer to store SQL string
-	/// @param stripArgs - replace condition values with '?'
-	void dumpOrderBy(WrSerializer &ser, bool stripArgs) const;
+	void deserialize(Serializer &ser, bool &hasJoinConditions);
 
 public:
-	/// Next operation constant.
-	OpType nextOp_ = OpAnd;
+	string _namespace;						   /// Name of the namespace.
+	unsigned start = 0;						   /// First row index from result set.
+	unsigned count = UINT_MAX;				   /// Number of rows from result set.
+	int debugLevel = 0;						   /// Debug level.
+	StrictMode strictMode = StrictModeNotSet;  /// Strict mode.
+	bool explain_ = false;					   /// Explain query if true
+	CalcTotalMode calcTotal = ModeNoTotal;	   /// Calculation mode.
+	QueryType type_ = QuerySelect;			   /// Query type
+	OpType nextOp_ = OpAnd;					   /// Next operation constant.
+	SortingEntries sortingEntries_;			   /// Sorting data.
+	h_vector<Variant, 0> forcedSortOrder_;	   /// Keys that always go first - before any ordered values.
+	vector<JoinedQuery> joinQueries_;		   /// List of queries for join.
+	vector<JoinedQuery> mergeQueries_;		   /// List of merge queries.
+	h_vector<string, 1> selectFilter_;		   /// List of columns in a final result set.
+	h_vector<string, 0> selectFunctions_;	   /// List of sql functions
 
-	/// Name of the namespace.
-	string _namespace;
+	std::multimap<unsigned, EqualPosition> equalPositions_;	 /// List of same position fields for queries with arrays
+	QueryEntries entries;
 
-	/// Sorting data.
-	SortingEntries sortingEntries_;
+	vector<AggregateEntry> aggregations_;
 
-	/// Calculation mode.
-	CalcTotalMode calcTotal = ModeNoTotal;
+private:
+	h_vector<UpdateEntry, 0> updateFields_;	 /// List of fields (and values) for update.
+	bool withRank_ = false;
+	friend class SQLParser;
+};
 
-	/// First row index from result set.
-	unsigned start = 0;
+class JoinedQuery : public Query {
+public:
+	JoinedQuery() = default;
+	JoinedQuery(const Query &q) : Query(q) {}
+	JoinedQuery(Query &&q) : Query(std::move(q)) {}
+	using Query::Query;
+	bool operator==(const JoinedQuery &obj) const;
 
-	/// Number of rows from result set.
-	unsigned count = UINT_MAX;
-
-	/// Debug level.
-	int debugLevel = 0;
-
-	/// Default join type.
-	JoinType joinType = JoinType::LeftJoin;
-
-	/// Keys that always go first - before any ordered values.
-	VariantArray forcedSortOrder;
-
-	/// List of queries for join.
-	vector<Query> joinQueries_;
-
-	/// List of merge queries.
-	vector<Query> mergeQueries_;
-
-	/// List of columns in a final result set.
-	h_vector<string, 4> selectFilter_;
-
-	/// List of sql functions
-	h_vector<string, 1> selectFunctions_;
-
-	/// List of same position fields for queries with arrays
-	h_vector<EqualPosition, 1> equalPositions_;
-
-	/// Explain query if true
-	bool explain_ = false;
+	JoinType joinType{JoinType::LeftJoin};	   /// Default join type.
+	h_vector<QueryJoinEntry, 0> joinEntries_;  /// Condition for join. Filled in each subqueries, empty in  root query
 };
 
 }  // namespace reindexer

@@ -1,67 +1,71 @@
 
 #include "core/query/query.h"
-#include "core/query/dslencoder.h"
-#include "core/query/dslparsetools.h"
-#include "core/type_consts.h"
-#include "estl/tokenizer.h"
-#include "gason/gason.h"
-#include "tools/errors.h"
+#include "core/query/dsl/dslencoder.h"
+#include "core/query/dsl/dslparser.h"
+#include "core/query/sql/sqlencoder.h"
+#include "core/query/sql/sqlparser.h"
 #include "tools/serializer.h"
 
 namespace reindexer {
 
+const string_view kLsnIndexName = "#lsn"_sv;
+const string_view kSlaveVersionIndexName = "#slave_version"_sv;
+
 Query::Query(const string &__namespace, unsigned _start, unsigned _count, CalcTotalMode _calcTotal)
-	: _namespace(__namespace), calcTotal(_calcTotal), start(_start), count(_count) {}
+	: _namespace(__namespace), start(_start), count(_count), calcTotal(_calcTotal) {}
 
 bool Query::operator==(const Query &obj) const {
-	if (!QueryWhere::operator==(obj)) return false;
+	if (entries != obj.entries) return false;
+	if (aggregations_ != obj.aggregations_) return false;
 
-	if (nextOp_ != obj.nextOp_) return false;
 	if (_namespace != obj._namespace) return false;
 	if (sortingEntries_ != obj.sortingEntries_) return false;
 	if (calcTotal != obj.calcTotal) return false;
 	if (start != obj.start) return false;
 	if (count != obj.count) return false;
 	if (debugLevel != obj.debugLevel) return false;
-	if (joinType != obj.joinType) return false;
-	if (forcedSortOrder != obj.forcedSortOrder) return false;
+	if (strictMode != obj.strictMode) return false;
+	if (forcedSortOrder_ != obj.forcedSortOrder_) return false;
 
 	if (selectFilter_ != obj.selectFilter_) return false;
 	if (selectFunctions_ != obj.selectFunctions_) return false;
 	if (joinQueries_ != obj.joinQueries_) return false;
 	if (mergeQueries_ != obj.mergeQueries_) return false;
+	if (updateFields_ != obj.updateFields_) return false;
 
 	return true;
 }
 
-int Query::FromSQL(const string_view &q) {
-	tokenizer parser(q);
-	return Parse(parser);
+bool JoinedQuery::operator==(const JoinedQuery &obj) const {
+	if (joinEntries_ != obj.joinEntries_) return false;
+	if (joinType != obj.joinType) return false;
+	return Query::operator==(obj);
 }
+void Query::FromSQL(const string_view &q) { SQLParser(*this).Parse(q); }
 
-Error Query::ParseJson(const string &dsl) {
-	try {
-		parseJson(dsl);
-	} catch (const Error &e) {
-		return e;
+Error Query::FromJSON(const string &dsl) { return dsl::Parse(dsl, *this); }
+
+string Query::GetJSON() const { return dsl::toDsl(*this); }
+
+Query &Query::SetObject(std::string field, VariantArray value, bool hasExpressions) {
+	for (auto &it : value) {
+		if (it.Type() != KeyValueString) {
+			throw Error(errLogic, "Unexpected variant type in SetObject: %s. Expecting KeyValueString with JSON-content",
+						Variant::TypeName(it.Type()));
+		}
 	}
-	return Error();
+	updateFields_.emplace_back(std::move(field), std::move(value), FieldModeSetJson, hasExpressions);
+	return *this;
 }
 
-void Query::parseJson(const string &dsl) {
-	JsonAllocator allocator;
-	JsonValue root;
-	char *endptr = nullptr;
-	char *src = const_cast<char *>(dsl.data());
+WrSerializer &Query::GetSQL(WrSerializer &ser, bool stripArgs) const { return SQLEncoder(*this).GetSQL(ser, stripArgs); }
 
-	auto error = jsonParse(src, &endptr, &root, allocator);
-	if (error != JSON_OK) {
-		throw Error(errParseJson, "Could not parse JSON-query: %s at %d", jsonStrError(error), int(endptr - src));
-	}
-	dsl::parse(root, *this);
+string Query::GetSQL(bool stripArgs) const {
+	WrSerializer ser;
+	return string(GetSQL(ser, stripArgs).Slice());
 }
 
-void Query::deserialize(Serializer &ser) {
+void Query::deserialize(Serializer &ser, bool &hasJoinConditions) {
 	while (!ser.Eof()) {
 		QueryEntry qe;
 		QueryJoinEntry qje;
@@ -69,47 +73,86 @@ void Query::deserialize(Serializer &ser) {
 		int qtype = ser.GetVarUint();
 		switch (qtype) {
 			case QueryCondition: {
-				qe.index = ser.GetVString().ToString();
-				qe.op = OpType(ser.GetVarUint());
+				qe.index = string(ser.GetVString());
+				OpType op = OpType(ser.GetVarUint());
 				qe.condition = CondType(ser.GetVarUint());
-				int count = ser.GetVarUint();
-				qe.values.reserve(count);
-				while (count--) qe.values.push_back(ser.GetVariant().EnsureHold());
-				entries.push_back(std::move(qe));
+				int cnt = ser.GetVarUint();
+				qe.values.reserve(cnt);
+				while (cnt--) qe.values.push_back(ser.GetVariant().EnsureHold());
+				entries.Append(op, std::move(qe));
 				break;
 			}
-			case QueryAggregation:
-				aggregations_.push_back({ser.GetVString().ToString(), AggType(ser.GetVarUint())});
+			case QueryJoinCondition: {
+				uint64_t type = ser.GetVarUint();
+				assert(type != JoinType::LeftJoin);
+				QueryEntry joinEntry(ser.GetVarUint());
+				hasJoinConditions = true;
+				entries.Append((type == JoinType::OrInnerJoin) ? OpOr : OpAnd, std::move(joinEntry));
 				break;
+			}
+			case QueryAggregation: {
+				AggregateEntry ae;
+				ae.type_ = static_cast<AggType>(ser.GetVarUint());
+				size_t fieldsCount = ser.GetVarUint();
+				ae.fields_.reserve(fieldsCount);
+				while (fieldsCount--) ae.fields_.push_back(string(ser.GetVString()));
+				auto pos = ser.Pos();
+				bool aggEnd = false;
+				while (!ser.Eof() && !aggEnd) {
+					int atype = ser.GetVarUint();
+					switch (atype) {
+						case QueryAggregationSort: {
+							auto fieldName = ser.GetVString();
+							ae.sortingEntries_.push_back({string(fieldName), ser.GetVarUint() != 0});
+							break;
+						}
+						case QueryAggregationLimit:
+							ae.limit_ = ser.GetVarUint();
+							break;
+						case QueryAggregationOffset:
+							ae.offset_ = ser.GetVarUint();
+							break;
+						default:
+							ser.SetPos(pos);
+							aggEnd = true;
+					}
+					pos = ser.Pos();
+				}
+				aggregations_.push_back(std::move(ae));
+				break;
+			}
 			case QueryDistinct:
-				qe.index = ser.GetVString().ToString();
+				qe.index = string(ser.GetVString());
 				if (!qe.index.empty()) {
 					qe.distinct = true;
 					qe.condition = CondAny;
-					entries.push_back(std::move(qe));
+					entries.Append(OpAnd, std::move(qe));
 				}
 				break;
 			case QuerySortIndex: {
 				SortingEntry sortingEntry;
-				sortingEntry.column = ser.GetVString().ToString();
+				sortingEntry.expression = string(ser.GetVString());
 				sortingEntry.desc = bool(ser.GetVarUint());
-				if (sortingEntry.column.length()) {
+				if (sortingEntry.expression.length()) {
 					sortingEntries_.push_back(std::move(sortingEntry));
 				}
-				int count = ser.GetVarUint();
-				forcedSortOrder.reserve(count);
-				while (count--) forcedSortOrder.push_back(ser.GetVariant().EnsureHold());
+				int cnt = ser.GetVarUint();
+				forcedSortOrder_.reserve(cnt);
+				while (cnt--) forcedSortOrder_.push_back(ser.GetVariant().EnsureHold());
 				break;
 			}
 			case QueryJoinOn:
 				qje.op_ = OpType(ser.GetVarUint());
 				qje.condition_ = CondType(ser.GetVarUint());
-				qje.index_ = ser.GetVString().ToString();
-				qje.joinIndex_ = ser.GetVString().ToString();
-				joinEntries_.push_back(std::move(qje));
+				qje.index_ = string(ser.GetVString());
+				qje.joinIndex_ = string(ser.GetVString());
+				reinterpret_cast<JoinedQuery *>(this)->joinEntries_.push_back(std::move(qje));
 				break;
 			case QueryDebugLevel:
 				debugLevel = ser.GetVarUint();
+				break;
+			case QueryStrictMode:
+				strictMode = StrictMode(ser.GetVarUint());
 				break;
 			case QueryLimit:
 				count = ser.GetVarUint();
@@ -121,360 +164,142 @@ void Query::deserialize(Serializer &ser) {
 				calcTotal = CalcTotalMode(ser.GetVarUint());
 				break;
 			case QuerySelectFilter:
-				selectFilter_.push_back(ser.GetVString().ToString());
+				selectFilter_.push_back(string(ser.GetVString()));
 				break;
 			case QueryEqualPosition: {
+				const unsigned strt = ser.GetVarUint();
 				vector<string> ep(ser.GetVarUint());
-				for (size_t i = 0; i < ep.size(); ++i) ep[i] = ser.GetVString().ToString();
-				equalPositions_.push_back(determineEqualPositionIndexes(ep));
+				for (size_t i = 0; i < ep.size(); ++i) ep[i] = string(ser.GetVString());
+				equalPositions_.emplace(strt, entries.DetermineEqualPositionIndexes(strt, ep));
 				break;
 			}
 			case QueryExplain:
 				explain_ = true;
 				break;
+			case QueryWithRank:
+				withRank_ = true;
+				break;
 			case QuerySelectFunction:
-				selectFunctions_.push_back(ser.GetVString().ToString());
+				selectFunctions_.push_back(string(ser.GetVString()));
+				break;
+			case QueryDropField: {
+				Drop(string(ser.GetVString()));
+				break;
+			}
+			case QueryUpdateField: {
+				VariantArray val;
+				string field(ser.GetVString());
+				int numValues = ser.GetVarUint();
+				bool hasExpressions = false;
+				while (numValues--) {
+					hasExpressions = ser.GetVarUint();
+					val.emplace_back(ser.GetVariant().EnsureHold());
+				}
+				Set(std::move(field), std::move(val), hasExpressions);
+				break;
+			}
+			case QueryUpdateObject: {
+				VariantArray val;
+				string field(ser.GetVString());
+				bool hasExpressions = false;
+				int numValues = ser.GetVarUint();
+				if (ser.GetVarUint() == 1) val.MarkArray();
+				while (numValues--) {
+					hasExpressions = ser.GetVarUint();
+					val.emplace_back(ser.GetVariant().EnsureHold());
+				}
+				SetObject(std::move(field), std::move(val), hasExpressions);
+				break;
+			}
+			case QueryOpenBracket: {
+				OpType op = OpType(ser.GetVarUint());
+				entries.OpenBracket(op);
+				break;
+			}
+			case QueryCloseBracket:
+				entries.CloseBracket();
 				break;
 			case QueryEnd:
 				return;
+			default:
+				throw Error(errParseBin, "Unknown type %d while parsing binary buffer", qtype);
 		}
 	}
-}
-
-int Query::Parse(tokenizer &parser) {
-	token tok = parser.next_token();
-
-	if (tok.text() == "explain"_sv) {
-		explain_ = true;
-		tok = parser.next_token();
-	}
-
-	if (tok.text() == "select"_sv) {
-		selectParse(parser);
-	} else {
-		throw Error(errParams, "Syntax error at or near '%s', %s", tok.text().data(), parser.where().c_str());
-	}
-	tok = parser.next_token();
-	if (tok.text() == ";") {
-		tok = parser.next_token();
-	}
-	parser.skip_space();
-	if (tok.text() != "" || !parser.end())
-		throw Error(errParseSQL, "Unexpected '%s' in query, %s", tok.text().data(), parser.where().c_str());
-
-	return 0;
-}
-
-int Query::selectParse(tokenizer &parser) {
-	// Get filter
-	token tok;
-	while (!parser.end()) {
-		auto nameWithCase = parser.peek_token(false);
-		auto name = parser.next_token();
-		tok = parser.peek_token();
-		if (tok.text() == "("_sv) {
-			parser.next_token();
-			tok = parser.next_token();
-			if (name.text() == "avg"_sv) {
-				aggregations_.push_back({tok.text().ToString(), AggAvg});
-			} else if (name.text() == "facet"_sv) {
-				aggregations_.push_back({tok.text().ToString(), AggFacet});
-			} else if (name.text() == "sum"_sv) {
-				aggregations_.push_back({tok.text().ToString(), AggSum});
-			} else if (name.text() == "min"_sv) {
-				aggregations_.push_back({tok.text().ToString(), AggMin});
-			} else if (name.text() == "max"_sv) {
-				aggregations_.push_back({tok.text().ToString(), AggMax});
-			} else if (name.text() == "count"_sv) {
-				calcTotal = ModeAccurateTotal;
-				count = 0;
-			} else {
-				throw Error(errParams, "Unknown function name SQL - %s, %s", name.text().data(), parser.where().c_str());
-			}
-			tok = parser.next_token();
-			if (tok.text() != ")"_sv) {
-				throw Error(errParams, "Expected ')', but found %s, %s", tok.text().data(), parser.where().c_str());
-			}
-			tok = parser.peek_token();
-
-		} else if (name.text() != "*"_sv) {
-			selectFilter_.push_back(nameWithCase.text().ToString());
-			count = INT_MAX;
-		} else if (name.text() == "*"_sv) {
-			count = INT_MAX;
-		}
-		if (tok.text() != ","_sv) break;
-		tok = parser.next_token();
-	}
-
-	if (parser.next_token().text() != "from"_sv)
-		throw Error(errParams, "Expected 'FROM', but found '%s' in query, %s", tok.text().data(), parser.where().c_str());
-
-	_namespace = parser.next_token().text().ToString();
-	parser.skip_space();
-
-	while (!parser.end()) {
-		tok = parser.peek_token();
-		if (tok.text() == "where"_sv) {
-			parser.next_token();
-			ParseWhere(parser);
-		} else if (tok.text() == "limit"_sv) {
-			parser.next_token();
-			tok = parser.next_token();
-			if (tok.type != TokenNumber)
-				throw Error(errParseSQL, "Expected number, but found '%s' in query, %s", tok.text().data(), parser.where().c_str());
-			count = atoi(tok.text().data());
-		} else if (tok.text() == "offset"_sv) {
-			parser.next_token();
-			tok = parser.next_token();
-			if (tok.type != TokenNumber)
-				throw Error(errParseSQL, "Expected number, but found '%s' in query, %s", tok.text().data(), parser.where().c_str());
-			start = atoi(tok.text().data());
-		} else if (tok.text() == "order"_sv) {
-			parser.next_token();
-			// Just skip token (BY)
-			parser.next_token();
-			for (;;) {
-				auto nameWithCase = parser.peek_token();
-				tok = parser.next_token(false);
-				if (tok.type != TokenName && tok.type != TokenString)
-					throw Error(errParseSQL, "Expected name, but found '%s' in query, %s", tok.text().data(), parser.where().c_str());
-				SortingEntry sortingEntry;
-				sortingEntry.column = tok.text().ToString();
-				tok = parser.peek_token();
-				if (tok.text() == "("_sv && nameWithCase.text() == "field"_sv) {
-					parser.next_token();
-					tok = parser.next_token(false);
-					if (tok.type != TokenName && tok.type != TokenString)
-						throw Error(errParseSQL, "Expected name, but found '%s' in query, %s", tok.text().data(), parser.where().c_str());
-					sortingEntry.column = tok.text().ToString();
-					for (;;) {
-						tok = parser.next_token();
-						if (tok.text() == ")"_sv) break;
-						if (tok.text() != ","_sv)
-							throw Error(errParseSQL, "Expected ')' or ',', but found '%s' in query, %s", tok.text().data(),
-										parser.where().c_str());
-						tok = parser.next_token();
-						if (tok.type != TokenNumber && tok.type != TokenString)
-							throw Error(errParseSQL, "Expected parameter, but found '%s' in query, %s", tok.text().data(),
-										parser.where().c_str());
-						forcedSortOrder.push_back(Variant(tok.text().ToString()));
-					}
-					tok = parser.peek_token();
-				}
-
-				if (tok.text() == "asc"_sv || tok.text() == "desc"_sv) {
-					sortingEntry.desc = bool(tok.text() == "desc"_sv);
-					parser.next_token();
-				}
-				sortingEntries_.push_back(std::move(sortingEntry));
-
-				auto nextToken = parser.peek_token();
-				if (nextToken.text() != ","_sv) break;
-				parser.next_token();
-			}
-		} else if (tok.text() == "join"_sv) {
-			parser.next_token();
-			parseJoin(JoinType::LeftJoin, parser);
-		} else if (tok.text() == "left"_sv) {
-			parser.next_token();
-			if (parser.next_token().text() != "join"_sv) {
-				throw Error(errParseSQL, "Expected JOIN, but found '%s' in query, %s", tok.text().data(), parser.where().c_str());
-			}
-			parseJoin(JoinType::LeftJoin, parser);
-		} else if (tok.text() == "inner"_sv) {
-			parser.next_token();
-			if (parser.next_token().text() != "join") {
-				throw Error(errParseSQL, "Expected JOIN, but found '%s' in query, %s", tok.text().data(), parser.where().c_str());
-			}
-			auto jtype = nextOp_ == OpOr ? JoinType::OrInnerJoin : JoinType::InnerJoin;
-			nextOp_ = OpAnd;
-			parseJoin(jtype, parser);
-		} else if (tok.text() == "merge"_sv) {
-			parser.next_token();
-			parseMerge(parser);
-		} else if (tok.text() == "or"_sv) {
-			parser.next_token();
-			nextOp_ = OpOr;
-		} else {
-			break;
-		}
-	}
-	return 0;
-}
-
-void Query::parseJoin(JoinType type, tokenizer &parser) {
-	Query jquery;
-	auto tok = parser.next_token();
-	if (tok.text() == "("_sv) {
-		tok = parser.next_token();
-		if (tok.text() != "select"_sv) {
-			throw Error(errParseSQL, "Expected 'SELECT', but found %s, %s", tok.text().data(), parser.where().c_str());
-		}
-		jquery.selectParse(parser);
-		tok = parser.next_token();
-		if (tok.text() != ")"_sv) {
-			throw Error(errParseSQL, "Expected ')', but found %s, %s", tok.text().data(), parser.where().c_str());
-		}
-	} else {
-		jquery._namespace = tok.text().ToString();
-	}
-	jquery.joinType = type;
-	jquery.parseJoinEntries(parser, _namespace);
-
-	joinQueries_.push_back(std::move(jquery));
-}
-
-void Query::parseMerge(tokenizer &parser) {
-	Query mquery;
-	auto tok = parser.next_token();
-	if (tok.text() == "("_sv) {
-		tok = parser.next_token();
-		if (tok.text() != "select"_sv) {
-			throw Error(errParseSQL, "Expected 'SELECT', but found %s, %s", tok.text().data(), parser.where().c_str());
-		}
-		mquery.selectParse(parser);
-		tok = parser.next_token();
-		if (tok.text() != ")"_sv) {
-			throw Error(errParseSQL, "Expected ')', but found %s, %s", tok.text().data(), parser.where().c_str());
-		}
-	}
-	mquery.joinType = JoinType::MergeR;
-
-	mergeQueries_.push_back(std::move(mquery));
-}
-
-// parse [table.]field
-// return field
-string parseDotStr(tokenizer &parser, string &str1) {
-	auto tok = parser.next_token();
-	if (tok.type != TokenName && tok.type != TokenString) {
-		throw Error(errParseSQL, "Expected name, but found %s, %s", tok.text().data(), parser.where().c_str());
-	}
-	if (parser.peek_token().text() != "."_sv) {
-		return tok.text().ToString();
-	}
-	parser.next_token();
-	str1 = tok.text().ToString();
-
-	tok = parser.next_token();
-	if (tok.type != TokenName && tok.type != TokenString) {
-		throw Error(errParseSQL, "Expected name, but found %s, %s", tok.text().data(), parser.where().c_str());
-	}
-	return tok.text().ToString();
-}
-
-void Query::parseJoinEntries(tokenizer &parser, const string &mainNs) {
-	parser.skip_space();
-	QueryJoinEntry je;
-	auto tok = parser.next_token();
-	if (tok.text() != "on"_sv) {
-		throw Error(errParseSQL, "Expected 'ON', but found %s, %s", tok.text().data(), parser.where().c_str());
-	}
-
-	tok = parser.peek_token();
-
-	bool braces = tok.text() == "("_sv;
-	if (braces) parser.next_token();
-
-	while (!parser.end()) {
-		auto tok = parser.peek_token();
-		if (tok.text() == "or"_sv) {
-			nextOp_ = OpOr;
-			parser.next_token();
-			tok = parser.peek_token();
-		} else if (tok.text() == "and"_sv) {
-			nextOp_ = OpAnd;
-			parser.next_token();
-			tok = parser.peek_token();
-		}
-
-		if (braces && tok.text() == ")"_sv) {
-			parser.next_token();
-			return;
-		}
-
-		string ns1 = mainNs, ns2 = _namespace;
-		string idx1 = parseDotStr(parser, ns1);
-		je.condition_ = getCondType(parser.next_token().text());
-		string idx2 = parseDotStr(parser, ns2);
-
-		if (ns1 == mainNs && ns2 == _namespace) {
-			je.index_ = idx1;
-			je.joinIndex_ = idx2;
-		} else if (ns2 == mainNs && ns1 == _namespace) {
-			je.index_ = idx2;
-			je.joinIndex_ = idx1;
-		} else {
-			throw Error(errParseSQL, "Unexpected tables with ON statement: ('%s' and '%s') but expected ('%s' and '%s'), %s", ns1.c_str(),
-						ns2.c_str(), mainNs.c_str(), _namespace.c_str(), parser.where().c_str());
-		}
-
-		je.op_ = nextOp_;
-		nextOp_ = OpAnd;
-		joinEntries_.push_back(std::move(je));
-		if (!braces) {
-			return;
-		}
-	}
+	return;
 }
 
 void Query::Serialize(WrSerializer &ser, uint8_t mode) const {
 	ser.PutVString(_namespace);
-	for (auto &qe : entries) {
-		qe.distinct ? ser.PutVarUint(QueryDistinct) : ser.PutVarUint(QueryCondition);
-		ser.PutVString(qe.index);
-		if (qe.distinct) continue;
-		ser.PutVarUint(qe.op);
-		ser.PutVarUint(qe.condition);
-		ser.PutVarUint(qe.values.size());
-		for (auto &kv : qe.values) ser.PutVariant(kv);
-	}
+	entries.Serialize(ser);
 
 	for (auto &agg : aggregations_) {
 		ser.PutVarUint(QueryAggregation);
-		ser.PutVString(agg.index_);
 		ser.PutVarUint(agg.type_);
+		ser.PutVarUint(agg.fields_.size());
+		for (const auto &field : agg.fields_) {
+			ser.PutVString(field);
+		}
+		for (const auto &se : agg.sortingEntries_) {
+			ser.PutVarUint(QueryAggregationSort);
+			ser.PutVString(se.expression);
+			ser.PutVarUint(se.desc);
+		}
+		if (agg.limit_ != UINT_MAX) {
+			ser.PutVarUint(QueryAggregationLimit);
+			ser.PutVarUint(agg.limit_);
+		}
+		if (agg.offset_ != 0) {
+			ser.PutVarUint(QueryAggregationOffset);
+			ser.PutVarUint(agg.offset_);
+		}
 	}
 
 	for (const SortingEntry &sortginEntry : sortingEntries_) {
 		ser.PutVarUint(QuerySortIndex);
-		ser.PutVString(sortginEntry.column);
+		ser.PutVString(sortginEntry.expression);
 		ser.PutVarUint(sortginEntry.desc);
-		int cnt = forcedSortOrder.size();
+		int cnt = forcedSortOrder_.size();
 		ser.PutVarUint(cnt);
-		for (auto &kv : forcedSortOrder) ser.PutVariant(kv);
+		for (auto &kv : forcedSortOrder_) ser.PutVariant(kv);
 	}
 
-	for (auto &qje : joinEntries_) {
-		ser.PutVarUint(QueryJoinOn);
-		ser.PutVarUint(qje.op_);
-		ser.PutVarUint(qje.condition_);
-		ser.PutVString(qje.index_);
-		ser.PutVString(qje.joinIndex_);
+	if (mode & WithJoinEntries) {
+		for (auto &qje : reinterpret_cast<const JoinedQuery *>(this)->joinEntries_) {
+			ser.PutVarUint(QueryJoinOn);
+			ser.PutVarUint(qje.op_);
+			ser.PutVarUint(qje.condition_);
+			ser.PutVString(qje.index_);
+			ser.PutVString(qje.joinIndex_);
+		}
 	}
 
-	for (const EqualPosition &ep : equalPositions_) {
+	for (const std::pair<unsigned, EqualPosition> &equalPoses : equalPositions_) {
 		ser.PutVarUint(QueryEqualPosition);
-		ser.PutVarUint(ep.size());
-		for (int pos : ep) ser.PutVString(entries[pos].index);
+		ser.PutVarUint(equalPoses.first);
+		ser.PutVarUint(equalPoses.second.size());
+		for (unsigned ep : equalPoses.second) ser.PutVString(entries[ep].index);
 	}
 
 	ser.PutVarUint(QueryDebugLevel);
 	ser.PutVarUint(debugLevel);
 
+	if (strictMode != StrictModeNotSet) {
+		ser.PutVarUint(QueryStrictMode);
+		ser.PutVarUint(int(strictMode));
+	}
+
 	if (!(mode & SkipLimitOffset)) {
-		if (count != UINT_MAX) {
+		if (HasLimit()) {
 			ser.PutVarUint(QueryLimit);
 			ser.PutVarUint(count);
 		}
-		if (start) {
+		if (HasOffset()) {
 			ser.PutVarUint(QueryOffset);
 			ser.PutVarUint(start);
 		}
 	}
 
-	if (calcTotal) {
+	if (calcTotal != ModeNoTotal) {
 		ser.PutVarUint(QueryReqTotal);
 		ser.PutVarUint(calcTotal);
 	}
@@ -488,163 +313,105 @@ void Query::Serialize(WrSerializer &ser, uint8_t mode) const {
 		ser.PutVarUint(QueryExplain);
 	}
 
+	if (withRank_) {
+		ser.PutVarUint(QueryWithRank);
+	}
+
+	for (const UpdateEntry &field : updateFields_) {
+		if (field.mode == FieldModeSet) {
+			ser.PutVarUint(QueryUpdateField);
+			ser.PutVString(field.column);
+			ser.PutVarUint(field.values.size());
+			for (const Variant &val : field.values) {
+				ser.PutVarUint(field.isExpression);
+				ser.PutVariant(val);
+			}
+		} else if (field.mode == FieldModeDrop) {
+			ser.PutVarUint(QueryDropField);
+			ser.PutVString(field.column);
+		} else {
+			throw Error(errLogic, "Unsupported item modification mode = %d", field.mode);
+		}
+	}
+
 	ser.PutVarUint(QueryEnd);  // finita la commedia... of root query
 
 	if (!(mode & SkipJoinQueries)) {
 		for (auto &jq : joinQueries_) {
 			ser.PutVarUint(static_cast<int>(jq.joinType));
-			jq.Serialize(ser);
+			jq.Serialize(ser, WithJoinEntries);
 		}
 	}
 
 	if (!(mode & SkipMergeQueries)) {
 		for (auto &mq : mergeQueries_) {
 			ser.PutVarUint(static_cast<int>(mq.joinType));
-			mq.Serialize(ser, mode);
+			mq.Serialize(ser, mode | WithJoinEntries);
 		}
 	}
 }
 
 void Query::Deserialize(Serializer &ser) {
-	_namespace = ser.GetVString().ToString();
-	deserialize(ser);
+	_namespace = string(ser.GetVString());
+	bool hasJoinConditions = false;
+	deserialize(ser, hasJoinConditions);
 
 	bool nested = false;
 	while (!ser.Eof()) {
 		auto joinType = JoinType(ser.GetVarUint());
-		Query q1(ser.GetVString().ToString());
+		JoinedQuery q1(string(ser.GetVString()));
 		q1.joinType = joinType;
-		q1.deserialize(ser);
+		q1.deserialize(ser, hasJoinConditions);
 		q1.debugLevel = debugLevel;
-		if (joinType == JoinType::MergeR) {
+		q1.strictMode = strictMode;
+		if (joinType == JoinType::Merge) {
 			mergeQueries_.emplace_back(std::move(q1));
 			nested = true;
-		} else if (nested) {
-			mergeQueries_.back().joinQueries_.emplace_back(std::move(q1));
 		} else {
-			joinQueries_.emplace_back(std::move(q1));
-		}
-	}
-}
-
-string Query::GetJSON() const { return dsl::toDsl(*this); }
-
-const char *Query::JoinTypeName(JoinType type) {
-	switch (type) {
-		case JoinType::InnerJoin:
-			return "INNER JOIN";
-		case JoinType::OrInnerJoin:
-			return "OR INNER JOIN";
-		case JoinType::LeftJoin:
-			return "LEFT JOIN";
-		case JoinType::MergeR:
-			return "MERGE";
-		default:
-			return "<unknown>";
-	}
-}
-
-extern const char *condNames[];
-
-void Query::dumpJoined(WrSerializer &ser, bool stripArgs) const {
-	for (auto &je : joinQueries_) {
-		ser << ' ' << JoinTypeName(je.joinType);
-
-		if (je.entries.empty() && je.count == INT_MAX && je.sortingEntries_.empty()) {
-			ser << ' ' << je._namespace << " ON ";
-		} else {
-			ser << " (";
-			je.GetSQL(ser, stripArgs);
-			ser << ") ON ";
-		}
-		if (je.joinEntries_.size() != 1) ser << "(";
-		for (auto &e : je.joinEntries_) {
-			if (&e != &*je.joinEntries_.begin()) {
-				ser << ((e.op_ == OpOr) ? " OR " : " AND ");
+			Query &q = nested ? mergeQueries_.back() : *this;
+			if (joinType != JoinType::LeftJoin && !hasJoinConditions) {
+				int joinIdx = joinQueries_.size();
+				entries.Append((joinType == JoinType::OrInnerJoin) ? OpOr : OpAnd, QueryEntry(joinIdx));
 			}
-			ser << je._namespace << '.' << e.joinIndex_ << ' ' << condNames[e.condition_] << ' ' << _namespace << '.' << e.index_;
+			q.joinQueries_.emplace_back(std::move(q1));
 		}
-		if (je.joinEntries_.size() != 1) ser << ')';
 	}
 }
 
-void Query::dumpMerged(WrSerializer &ser, bool stripArgs) const {
-	for (auto &me : mergeQueries_) {
-		ser << ' ' << JoinTypeName(me.joinType) << "( ";
-		me.GetSQL(ser, stripArgs);
-		ser << ')';
+Query &Query::Join(JoinType joinType, const string &index, const string &joinIndex, CondType cond, OpType op, const Query &qr) {
+	QueryJoinEntry joinEntry;
+	joinEntry.op_ = op;
+	joinEntry.condition_ = cond;
+	joinEntry.index_ = index;
+	joinEntry.joinIndex_ = joinIndex;
+	joinQueries_.emplace_back(qr);
+	joinQueries_.back().joinType = joinType;
+	joinQueries_.back().joinEntries_.push_back(joinEntry);
+	if (joinType != JoinType::LeftJoin) {
+		entries.Append((joinType == JoinType::InnerJoin) ? OpType::OpAnd : OpType::OpOr, QueryEntry(joinQueries_.size() - 1));
 	}
+	return *this;
 }
 
-void Query::dumpOrderBy(WrSerializer &ser, bool stripArgs) const {
-	if (sortingEntries_.empty()) return;
-
-	ser << " ORDER BY ";
-	for (size_t i = 0; i < sortingEntries_.size(); ++i) {
-		const SortingEntry &sortingEntry(sortingEntries_[i]);
-		if (forcedSortOrder.empty()) {
-			ser << sortingEntry.column;
-		} else {
-			ser << "FIELD(" << sortingEntry.column;
-			if (stripArgs) {
-				ser << '?';
-			} else {
-				for (auto &v : forcedSortOrder) {
-					ser << ", '" << v.As<string>() << "'";
-				}
-			}
-			ser << ")";
-		}
-		ser << (sortingEntry.desc ? " DESC" : "");
-		if (i != sortingEntries_.size() - 1) ser << ", ";
-	}
+void Query::WalkNested(bool withSelf, bool withMerged, std::function<void(const Query &q)> visitor) const {
+	if (withSelf) visitor(*this);
+	if (withMerged)
+		for (auto &mq : mergeQueries_) visitor(mq);
+	for (auto &jq : joinQueries_) visitor(jq);
+	for (auto &mq : mergeQueries_)
+		for (auto &jq : mq.joinQueries_) visitor(jq);
 }
 
-WrSerializer &Query::GetSQL(WrSerializer &ser, bool stripArgs) const {
-	ser << "SELECT ";
-	if (aggregations_.size()) {
-		for (auto &a : aggregations_) {
-			if (&a != &*aggregations_.begin()) ser << ',';
-			switch (a.type_) {
-				case AggAvg:
-					ser << "AVG(";
-					break;
-				case AggSum:
-					ser << "SUM(";
-					break;
-				case AggFacet:
-					ser << "FACET(";
-					break;
-				case AggMin:
-					ser << "MIN(";
-					break;
-				case AggMax:
-					ser << "MAX(";
-					break;
-				default:
-					ser << "<?> (";
-					break;
-			}
-			ser << a.index_ << ')';
+bool Query::IsWALQuery() const noexcept {
+	if (entries.Size() == 1 && entries.IsValue(0) && kLsnIndexName == entries[0].index) {
+		return true;
+	} else if (entries.Size() == 2 && entries.IsValue(0) && entries.IsValue(1)) {
+		if ((kLsnIndexName == entries[0].index && kSlaveVersionIndexName == entries[1].index) ||
+			(kLsnIndexName == entries[1].index && kSlaveVersionIndexName == entries[0].index)) {
+			return true;
 		}
-	} else if (selectFilter_.size()) {
-		for (auto &f : selectFilter_) {
-			if (&f != &*selectFilter_.begin()) ser << ',';
-			ser << f;
-		}
-	} else
-		ser << '*';
-	if (calcTotal) ser << ", COUNT(*)";
-
-	ser << " FROM " << _namespace;
-	dumpWhere(ser, stripArgs);
-	dumpJoined(ser, stripArgs);
-	dumpMerged(ser, stripArgs);
-	dumpOrderBy(ser, stripArgs);
-
-	if (start != 0) ser << " OFFSET " << start;
-	if (count != UINT_MAX) ser << " LIMIT " << count;
-	return ser;
+	}
+	return false;
 }
 
 }  // namespace reindexer

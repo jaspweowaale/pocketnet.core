@@ -2,40 +2,45 @@
 #include "core/ft/config/ftfastconfig.h"
 #include "core/ft/ftdsl.h"
 #include "core/ft/idrelset.h"
-#include "core/idset.h"
 #include "core/selectfunc/ctx/ftctx.h"
 #include "dataholder.h"
 
-using std::vector;
 namespace reindexer {
+using std::vector;
 
 class Selecter {
+	using index_t = uint32_t;
+	enum : index_t { kExcluded = std::numeric_limits<index_t>::max() };
+
 public:
 	Selecter(DataHolder& holder, size_t fieldSize, bool needArea) : holder_(holder), fieldSize_(fieldSize), needArea_(needArea) {}
 
 	struct TextSearchResult {
 		const PackedIdRelSet* vids_;
-		const char* pattern;
+		string_view pattern;
 		int proc_;
 		int16_t wordLen_;
 	};
 
+	// Final information about found document
 	struct MergeInfo {
-		IdType id;
-		int proc;
+		IdType id;		 // Virual of merged document (index in vdocs)
+		int16_t proc;	 // Rank of document
+		int8_t matched;	 // Count of matched terms in document
+		int8_t field;	 // Field index, where was match
 		AreaHolder::UniquePtr holder;
-		uint16_t step_id;
 	};
 
 	struct MergeData : public vector<MergeInfo> {
 		int mergeCnt = 0;
 	};
 
+	// Intermediate information about found document in current merge step. Used only for queries with 2 or more terms
 	struct MergedIdRel {
-		IdRelType cur;
-		IdRelType next;
-		int rank;
-		int qpos;
+		IdRelType cur;	 // Ids & pos of matched document of current step
+		IdRelType next;	 // Ids & pos of matched document of next step
+		int rank;		 // Rank of curent matched document
+		int qpos;		 // Position in query
 	};
 	struct FtVariantEntry {
 		string pattern;
@@ -56,15 +61,15 @@ public:
 		vector<TextSearchResults> rawResults;
 	};
 	MergeData mergeResults(vector<TextSearchResults>& rawResults);
-	void mergeItaration(TextSearchResults& rawRes, vector<bool>& exists, vector<MergeInfo>& merged, vector<MergedIdRel>& merged_rd,
-						h_vector<int16_t>& idoffsets);
+	void mergeItaration(TextSearchResults& rawRes, index_t rawResIndex, fast_hash_map<VDocIdType, index_t>& added,
+						vector<MergeInfo>& merged, vector<MergedIdRel>& merged_rd, h_vector<int16_t>& idoffsets, vector<bool>& curExists);
 
 	void debugMergeStep(const char* msg, int vid, float normBm25, float normDist, int finalRank, int prevRank);
 	void processVariants(FtSelectContext&);
-	void prepareVariants(FtSelectContext&, FtDSLEntry&, std::vector<string>& langs);
+	void prepareVariants(FtSelectContext&, const FtDSLEntry&, const std::vector<string>& langs, FtDSLQuery&, bool needVariants);
 	void processStepVariants(FtSelectContext& ctx, DataHolder::CommitStep& step, const FtVariantEntry& variant, TextSearchResults& res);
 
-	void processTypos(FtSelectContext&, FtDSLEntry&);
+	void processTypos(FtSelectContext&, const FtDSLEntry&);
 
 	DataHolder& holder_;
 	size_t fieldSize_;

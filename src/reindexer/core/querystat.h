@@ -1,35 +1,52 @@
 #pragma once
 
-#include <stdlib.h>
-#include <chrono>
-#include <functional>
-#include <mutex>
 #include <string>
-#include <unordered_map>
-#include "estl/shared_mutex.h"
-#include "namespacestat.h"
+#include "estl/fast_hash_map.h"
+#include "namespace/namespacestat.h"
 #include "perfstatcounter.h"
-#include "query/query.h"
-#include "tools/serializer.h"
+#include "tools/stringstools.h"
 
 namespace reindexer {
 
+class WrSerializer;
+class Query;
+
 struct QueryPerfStat {
-	void GetJSON(WrSerializer &ser) const;
+	void GetJSON(WrSerializer& ser) const;
 	std::string query;
 	PerfStat perf;
+	std::string longestQuery;
 };
 
 class QueriesStatTracer {
 public:
-	void Hit(const Query &q, std::chrono::microseconds time);
-	void LockHit(const Query &q, std::chrono::microseconds time);
+	struct QuerySQL {
+		string_view normalized;
+		string_view nonNormalized;
+	};
+
+	void Hit(const QuerySQL& sql, std::chrono::microseconds time) { hit<&PerfStatCounterST::Hit>(sql, time); }
+	void LockHit(const QuerySQL& sql, std::chrono::microseconds time) { hit<&PerfStatCounterST::LockHit>(sql, time); }
 	const std::vector<QueryPerfStat> Data();
+	void Reset() {
+		std::unique_lock<std::mutex> lck(mtx_);
+		stat_.clear();
+	}
 
 protected:
+	struct Stat : public PerfStatCounterST {
+		Stat(string_view q) : longestQuery(q) {}
+		std::string longestQuery;
+	};
+
+	template <void (PerfStatCounterST::*hitFunc)(std::chrono::microseconds)>
+	void hit(const QuerySQL&, std::chrono::microseconds);
+
 	std::mutex mtx_;
-	std::unordered_map<std::string, PerfStatCounterST> stat_;
+	fast_hash_map<std::string, Stat, hash_str, equal_str> stat_;
 };
+extern template void QueriesStatTracer::hit<&PerfStatCounterST::Hit>(const QuerySQL&, std::chrono::microseconds);
+extern template void QueriesStatTracer::hit<&PerfStatCounterST::LockHit>(const QuerySQL&, std::chrono::microseconds);
 
 class QueryStatCalculator {
 public:

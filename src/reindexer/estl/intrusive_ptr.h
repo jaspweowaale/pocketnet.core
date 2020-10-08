@@ -41,9 +41,9 @@ public:
 		return *this;
 	}
 
-	intrusive_ptr(intrusive_ptr &&rhs) : px(rhs.px) { rhs.px = 0; }
+	intrusive_ptr(intrusive_ptr &&rhs) noexcept : px(rhs.px) { rhs.px = 0; }
 
-	intrusive_ptr &operator=(intrusive_ptr &&rhs) {
+	intrusive_ptr &operator=(intrusive_ptr &&rhs) noexcept {
 		this_type(static_cast<intrusive_ptr &&>(rhs)).swap(*this);
 		return *this;
 	}
@@ -60,6 +60,12 @@ public:
 	void reset() { this_type().swap(*this); }
 
 	void reset(T *rhs) { this_type(rhs).swap(*this); }
+	bool unique() const {
+		if (px == 0) {
+			return true;
+		}
+		return intrusive_ptr_is_unique(px);
+	}
 
 	T *get() const { return px; }
 
@@ -152,19 +158,29 @@ class intrusive_atomic_rc_wrapper;
 
 template <typename T>
 inline static void intrusive_ptr_add_ref(intrusive_atomic_rc_wrapper<T> *x) {
-	if (x) x->refcount++;
+	if (x) {
+		x->refcount.fetch_add(1, std::memory_order_relaxed);
+	}
 }
 
 template <typename T>
 inline static void intrusive_ptr_release(intrusive_atomic_rc_wrapper<T> *x) {
-	if (x && x->refcount-- == 1) delete x;
+	if (x && x->refcount.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+		delete x;
+	}
+}
+
+template <typename T>
+inline static bool intrusive_ptr_is_unique(intrusive_atomic_rc_wrapper<T> *x) {
+	// std::memory_order_acquire - is essential for COW constructions based on intrusive_ptr
+	return !x || (x->refcount.load(std::memory_order_acquire) == 1);
 }
 
 template <typename T>
 class intrusive_atomic_rc_wrapper : public T {
 public:
 	template <typename... Args>
-	intrusive_atomic_rc_wrapper(Args &&... args) : T(args...), refcount(0) {}
+	intrusive_atomic_rc_wrapper(Args &&... args) : T(std::forward<Args>(args)...), refcount(0) {}
 	intrusive_atomic_rc_wrapper &operator=(const intrusive_atomic_rc_wrapper &) = delete;
 
 protected:
@@ -172,6 +188,7 @@ protected:
 
 	friend void intrusive_ptr_add_ref<>(intrusive_atomic_rc_wrapper<T> *x);
 	friend void intrusive_ptr_release<>(intrusive_atomic_rc_wrapper<T> *x);
+	friend bool intrusive_ptr_is_unique<>(intrusive_atomic_rc_wrapper<T> *x);
 };
 
 template <typename T, typename... Args>

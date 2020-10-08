@@ -1,0 +1,52 @@
+#include "sortingcontext.h"
+#include "core/index/index.h"
+#include "core/query/query.h"
+
+namespace reindexer {
+
+Index *SortingContext::sortIndex() const { return entries.empty() ? nullptr : entries[0].index; }
+
+const Index *SortingContext::sortIndexIfOrdered() const {
+	return (!entries.empty() && isIndexOrdered() && enableSortOrders) ? entries[0].index : nullptr;
+}
+
+int SortingContext::sortId() const {
+	if (!enableSortOrders) return 0;
+	Index *sortIdx = sortIndex();
+	return sortIdx ? sortIdx->SortId() : 0;
+}
+
+bool SortingContext::isIndexOrdered() const { return (!entries.empty() && entries[0].index && entries[0].index->IsOrdered()); }
+
+bool SortingContext::isOptimizationEnabled() const { return (uncommitedIndex >= 0) && sortIndex(); }
+
+const SortingContext::Entry *SortingContext::getFirstColumnEntry() const {
+	if (entries.empty()) return nullptr;
+	return &entries[0];
+}
+
+void SortingContext::resetOptimization() {
+	uncommitedIndex = -1;
+	if (!entries.empty()) entries[0].index = nullptr;
+}
+
+SortingOptions::SortingOptions(const SortingContext &sortingContext)
+	: forcedMode{sortingContext.forcedMode},
+	  multiColumn{sortingContext.entries.size() > 1},
+	  haveExpression{!sortingContext.expressions.empty()} {
+	if (sortingContext.entries.empty()) {
+		usingGeneralAlgorithm = false;
+		byBtreeIndex = false;
+	} else {
+		const SortingContext::Entry &sortEntry = sortingContext.entries[0];
+		if (sortEntry.index && sortEntry.index->IsOrdered()) {
+			byBtreeIndex = (sortingContext.isOptimizationEnabled() || sortingContext.enableSortOrders);
+			multiColumnByBtreeIndex = (byBtreeIndex && multiColumn);
+		}
+		usingGeneralAlgorithm = !byBtreeIndex;
+	}
+}
+
+bool SortingOptions::postLoopSortingRequired() const { return multiColumn || usingGeneralAlgorithm || forcedMode || haveExpression; }
+
+}  // namespace reindexer

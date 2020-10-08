@@ -2,12 +2,10 @@
 
 #include "comparatorimpl.h"
 #include "compositearraycomparator.h"
-#include "estl/fast_hash_set.h"
 
 namespace reindexer {
 
-using reindexer::lower;
-class Comparator {
+class Comparator : public ComparatorVars {
 public:
 	Comparator();
 	Comparator(CondType cond, KeyValueType type, const VariantArray &values, bool isArray, bool distinct, PayloadType payloadType,
@@ -15,9 +13,17 @@ public:
 	~Comparator();
 
 	bool Compare(const PayloadValue &lhs, int rowId);
+	void ExcludeDistinct(const PayloadValue &, int rowId);
 	void Bind(PayloadType type, int field);
 	void BindEqualPosition(int field, const VariantArray &val, CondType cond);
 	void BindEqualPosition(const TagsPath &tagsPath, const VariantArray &val, CondType cond);
+	void ClearDistinct() {
+		cmpInt.ClearDistinct();
+		cmpBool.ClearDistinct();
+		cmpInt64.ClearDistinct();
+		cmpDouble.ClearDistinct();
+		cmpString.ClearDistinct();
+	}
 
 protected:
 	bool compare(const Variant &kr) {
@@ -34,38 +40,73 @@ protected:
 				return cmpDouble.Compare(cond_, static_cast<double>(kr));
 			case KeyValueString:
 				return cmpString.Compare(cond_, static_cast<p_string>(kr), collateOpts_);
-			case KeyValueComposite: {
-				const PayloadValue &pl = static_cast<const PayloadValue &>(kr);
-				return cmpComposite.Compare(cond_, const_cast<PayloadValue &>(pl), collateOpts_);
-			}
+			case KeyValueComposite:
+				return cmpComposite.Compare(cond_, static_cast<const PayloadValue &>(kr), *this);
 			default:
 				abort();
 		}
 	}
 
-	bool compare(void *ptr) {
+	bool compare(const void *ptr) {
 		switch (type_) {
 			case KeyValueNull:
 				return cond_ == CondEmpty;
 			case KeyValueBool:
-				return cmpBool.Compare(cond_, *static_cast<bool *>(ptr));
+				return cmpBool.Compare(cond_, *static_cast<const bool *>(ptr));
 			case KeyValueInt:
-				return cmpInt.Compare(cond_, *static_cast<int *>(ptr));
+				return cmpInt.Compare(cond_, *static_cast<const int *>(ptr));
 			case KeyValueInt64:
-				return cmpInt64.Compare(cond_, *static_cast<int64_t *>(ptr));
+				return cmpInt64.Compare(cond_, *static_cast<const int64_t *>(ptr));
 			case KeyValueDouble:
-				return cmpDouble.Compare(cond_, *static_cast<double *>(ptr));
+				return cmpDouble.Compare(cond_, *static_cast<const double *>(ptr));
 			case KeyValueString:
-				return cmpString.Compare(cond_, *static_cast<p_string *>(ptr), collateOpts_);
+				return cmpString.Compare(cond_, *static_cast<const p_string *>(ptr), collateOpts_);
 			case KeyValueComposite:
-				return cmpComposite.Compare(cond_, *static_cast<PayloadValue *>(ptr), collateOpts_);
+				return cmpComposite.Compare(cond_, *static_cast<const PayloadValue *>(ptr), *this);
 			default:
 				abort();
 		}
 	}
 
-	inline
-	bool is_unique(const Variant& v) { return dist_ ? dist_->emplace(v).second : true; }
+	void excludeDistinct(const Variant &kr) {
+		switch (kr.Type()) {
+			case KeyValueInt:
+				return cmpInt.ExcludeDistinct(static_cast<int>(kr));
+			case KeyValueBool:
+				return cmpBool.ExcludeDistinct(static_cast<bool>(kr));
+			case KeyValueInt64:
+				return cmpInt64.ExcludeDistinct(static_cast<int64_t>(kr));
+			case KeyValueDouble:
+				return cmpDouble.ExcludeDistinct(static_cast<double>(kr));
+			case KeyValueString:
+				return cmpString.ExcludeDistinct(static_cast<p_string>(kr));
+			case KeyValueComposite:
+				throw Error(errQueryExec, "Distinct by composite index");
+			case KeyValueNull:
+			default:
+				break;
+		}
+	}
+
+	void excludeDistinct(const void *ptr) {
+		switch (type_) {
+			case KeyValueBool:
+				return cmpBool.ExcludeDistinct(*static_cast<const bool *>(ptr));
+			case KeyValueInt:
+				return cmpInt.ExcludeDistinct(*static_cast<const int *>(ptr));
+			case KeyValueInt64:
+				return cmpInt64.ExcludeDistinct(*static_cast<const int64_t *>(ptr));
+			case KeyValueDouble:
+				return cmpDouble.ExcludeDistinct(*static_cast<const double *>(ptr));
+			case KeyValueString:
+				return cmpString.ExcludeDistinct(*static_cast<const p_string *>(ptr));
+			case KeyValueComposite:
+				throw Error(errQueryExec, "Distinct by composite index");
+			case KeyValueNull:
+			default:
+				break;
+		}
+	}
 
 	void setValues(const VariantArray &values);
 
@@ -74,21 +115,8 @@ protected:
 	ComparatorImpl<int64_t> cmpInt64;
 	ComparatorImpl<double> cmpDouble;
 	ComparatorImpl<key_string> cmpString;
-
-	CondType cond_ = CondEq;
-	KeyValueType type_ = KeyValueUndefined;
-	size_t offset_ = 0;
-	size_t sizeof_ = 0;
-	bool isArray_ = false;
-	uint8_t *rawData_ = nullptr;
-	CollateOpts collateOpts_;
-
-	PayloadType payloadType_;
-	FieldsSet fields_;
 	ComparatorImpl<PayloadValue> cmpComposite;
 	CompositeArrayComparator cmpEqualPosition;
-	shared_ptr<fast_hash_set<Variant>> dist_;
-	bool equalPositionMode = false;
 };
 
 }  // namespace reindexer

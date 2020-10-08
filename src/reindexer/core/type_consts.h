@@ -35,6 +35,7 @@ typedef enum IndexType {
 	IndexStrStore = 15,
 	IndexDoubleStore = 16,
 	IndexCompositeFuzzyFT = 17,
+	IndexTtl = 18,
 } IndexType;
 
 typedef enum QueryItemType {
@@ -52,13 +53,25 @@ typedef enum QueryItemType {
 	QueryEnd,
 	QueryExplain,
 	QueryEqualPosition,
+	QueryUpdateField,
+	QueryAggregationLimit,
+	QueryAggregationOffset,
+	QueryAggregationSort,
+	QueryOpenBracket,
+	QueryCloseBracket,
+	QueryJoinCondition,
+	QueryDropField,
+	QueryUpdateObject,
+	QueryWithRank,
+	QueryStrictMode,
 } QueryItemType;
 
 typedef enum QuerySerializeMode {
 	Normal = 0x0,
 	SkipJoinQueries = 0x01,
 	SkipMergeQueries = 0x02,
-	SkipLimitOffset = 0x04
+	SkipLimitOffset = 0x04,
+	WithJoinEntries = 0x08,
 } QuerySerializeMode;
 
 typedef enum CondType {
@@ -72,6 +85,7 @@ typedef enum CondType {
 	CondSet = 7,
 	CondAllSet = 8,
 	CondEmpty = 9,
+	CondLike = 10,
 } CondType;
 
 enum ErrorCode {
@@ -89,22 +103,38 @@ enum ErrorCode {
 	errNotValid = 11,
 	errNetwork = 12,
 	errNotFound = 13,
-	errStateInvalidated = 14
+	errStateInvalidated = 14,
+	errBadTransaction = 15,
+	errOutdatedWAL = 16,
+	errNoWAL = 17,
+	errDataHashMismatch = 18,
+	errTimeout = 19,
+	errCanceled = 20,
+	errTagsMissmatch = 21,
+	errReplParams = 22,
+	errNamespaceInvalidated = 23,
+	errParseMsgPack = 24,
 };
+
+enum QueryType { QuerySelect, QueryDelete, QueryUpdate, QueryTruncate };
 
 enum OpType { OpOr = 1, OpAnd = 2, OpNot = 3 };
 
-enum AggType { AggSum, AggAvg, AggFacet, AggMin, AggMax };
+enum ArithmeticOpType { OpPlus = 0, OpMinus = 1, OpMult = 2, OpDiv = 3 };
 
-enum JoinType { LeftJoin, InnerJoin, OrInnerJoin, MergeR };
+enum AggType { AggSum, AggAvg, AggFacet, AggMin, AggMax, AggDistinct, AggUnknown = -1 };
+
+enum JoinType { LeftJoin, InnerJoin, OrInnerJoin, Merge };
 
 enum CalcTotalMode { ModeNoTotal, ModeCachedTotal, ModeAccurateTotal };
 
-enum DataFormat { FormatJson, FormatCJson };
+enum DataFormat { FormatJson, FormatCJson, FormatMsgPack };
 
 enum QueryResultItemType { QueryResultEnd, QueryResultAggregation, QueryResultExplain };
 
 enum CacheMode { CacheModeOn = 0, CacheModeAggressive = 1, CacheModeOff = 2 };
+
+enum StrictMode { StrictModeNotSet = 0, StrictModeNone, StrictModeNames, StrictModeIndexes };
 
 typedef int IdType;
 typedef unsigned SortType;
@@ -120,15 +150,23 @@ enum {
 	kResultsPtrs = 0x1,
 	kResultsCJson = 0x2,
 	kResultsJson = 0x3,
+	kResultsMsgPack = 0x4,
 
 	kResultsWithPayloadTypes = 0x10,
 	kResultsWithItemID = 0x20,
-	kResultsWithPercents = 0x40,
+	kResultsWithRank = 0x40,
 	kResultsWithNsID = 0x80,
-	kResultsWithJoined = 0x100
+	kResultsWithJoined = 0x100,
+	kResultsWithRaw = 0x200,
+	kResultsNeedOutputRank = 0x400,
 };
 
-typedef enum IndexOpt { kIndexOptPK = 1 << 7, kIndexOptArray = 1 << 6, kIndexOptDense = 1 << 5, kIndexOptSparse = 1 << 3 } IndexOpt;
+typedef enum IndexOpt {
+	kIndexOptPK = 1 << 7,
+	kIndexOptArray = 1 << 6,
+	kIndexOptDense = 1 << 5,
+	kIndexOptSparse = 1 << 3,
+} IndexOpt;
 
 typedef enum StotageOpt {
 	kStorageOptEnabled = 1 << 0,
@@ -136,16 +174,25 @@ typedef enum StotageOpt {
 	kStorageOptCreateIfMissing = 1 << 2,
 	kStorageOptVerifyChecksums = 1 << 3,
 	kStorageOptFillCache = 1 << 4,
-	kStorageOptSync = 1 << 5
+	kStorageOptSync = 1 << 5,
+	kStorageOptLazyLoad = 1 << 6,
+	kStorageOptSlaveMode = 1 << 7,
+	kStorageOptAutorepair = 1 << 9,
 } StorageOpt;
 
 enum CollateMode { CollateNone = 0, CollateASCII, CollateUTF8, CollateNumeric, CollateCustom };
+
+enum FieldModifyMode {
+	FieldModeSet = 0,
+	FieldModeDrop = 1,
+	FieldModeSetJson = 2,
+};
 
 enum ItemModifyMode { ModeUpdate = 0, ModeInsert = 1, ModeUpsert = 2, ModeDelete = 3 };
 
 typedef struct StorageOpts {
 #ifdef __cplusplus
-	StorageOpts() : options(0) {}
+	StorageOpts() : options(0), noQueryIdleThresholdSec(0) {}
 
 	bool IsEnabled() const { return options & kStorageOptEnabled; }
 	bool IsDropOnFileFormatError() const { return options & kStorageOptDropOnFileFormatError; }
@@ -153,6 +200,9 @@ typedef struct StorageOpts {
 	bool IsVerifyChecksums() const { return options & kStorageOptVerifyChecksums; }
 	bool IsFillCache() const { return options & kStorageOptFillCache; }
 	bool IsSync() const { return options & kStorageOptSync; }
+	bool IsLazyLoad() const { return options & kStorageOptLazyLoad; }
+	bool IsSlaveMode() const { return options & kStorageOptSlaveMode; }
+	bool IsAutorepair() const { return options & kStorageOptAutorepair; }
 
 	StorageOpts& Enabled(bool value = true) {
 		options = value ? options | kStorageOptEnabled : options & ~(kStorageOptEnabled);
@@ -183,6 +233,101 @@ typedef struct StorageOpts {
 		options = value ? options | kStorageOptSync : options & ~(kStorageOptSync);
 		return *this;
 	}
+
+	StorageOpts& LazyLoad(bool value = true) {
+		options = value ? options | kStorageOptLazyLoad : options & ~(kStorageOptLazyLoad);
+		return *this;
+	}
+
+	StorageOpts& SlaveMode(bool value = true) {
+		options = value ? options | kStorageOptSlaveMode : options & ~(kStorageOptSlaveMode);
+		return *this;
+	}
+
+	StorageOpts& Autorepair(bool value = true) {
+		options = value ? options | kStorageOptAutorepair : options & ~(kStorageOptAutorepair);
+		return *this;
+	}
 #endif
-	uint8_t options;
+	uint16_t options;
+	uint16_t noQueryIdleThresholdSec;
 } StorageOpts;
+
+typedef enum ConnectOpt {
+	kConnectOptOpenNamespaces = 1 << 0,
+	kConnectOptAllowNamespaceErrors = 1 << 1,
+	kConnectOptAutorepair = 1 << 2,
+	kConnectOptCheckClusterID = 1 << 3,
+	kConnectOptWarnVersion = 1 << 4,
+} ConnectOpt;
+
+typedef enum StorageTypeOpt {
+	kStorageTypeOptLevelDB = 0,
+	kStorageTypeOptRocksDB = 1,
+} StorageTypeOpt;
+
+typedef struct ConnectOpts {
+#ifdef __cplusplus
+	ConnectOpts() : storage(kStorageTypeOptLevelDB), options(kConnectOptOpenNamespaces), expectedClusterID(-1) {}
+
+	bool IsOpenNamespaces() const { return options & kConnectOptOpenNamespaces; }
+	bool IsAllowNamespaceErrors() const { return options & kConnectOptAllowNamespaceErrors; }
+	bool IsAutorepair() const { return options & kConnectOptAutorepair; }
+	StorageTypeOpt StorageType() const {
+		if (storage == static_cast<uint16_t>(kStorageTypeOptRocksDB)) {
+			return kStorageTypeOptRocksDB;
+		}
+		return kStorageTypeOptLevelDB;
+	}
+	int ExpectedClusterID() const { return expectedClusterID; }
+	bool HasExpectedClusterID() const { return options & kConnectOptCheckClusterID; }
+
+	ConnectOpts& OpenNamespaces(bool value = true) {
+		options = value ? options | kConnectOptOpenNamespaces : options & ~(kConnectOptOpenNamespaces);
+		return *this;
+	}
+
+	ConnectOpts& AllowNamespaceErrors(bool value = true) {
+		options = value ? options | kConnectOptAllowNamespaceErrors : options & ~(kConnectOptAllowNamespaceErrors);
+		return *this;
+	}
+
+	ConnectOpts& Autorepair(bool value = true) {
+		options = value ? options | kConnectOptAutorepair : options & ~(kConnectOptAutorepair);
+		return *this;
+	}
+
+	ConnectOpts& WithStorageType(StorageTypeOpt type) {
+		storage = static_cast<uint16_t>(type);
+		return *this;
+	}
+
+	ConnectOpts& WithExpectedClusterID(int clusterID) {
+		expectedClusterID = clusterID;
+		options |= kConnectOptCheckClusterID;
+		return *this;
+	}
+#endif
+	uint16_t storage;
+	uint16_t options;
+	int expectedClusterID;
+} ConnectOpts;
+
+enum IndexValueType { NotSet = -1, SetByJsonPath = -2 };
+
+enum SubscriptionOpt {
+	kSubscriptionOptIncrementSubscription = 1 << 0,
+};
+
+typedef struct SubscriptionOpts {
+#ifdef __cplusplus
+	SubscriptionOpts() : options(0) {}
+
+	bool IsIncrementSubscription() const { return options & kSubscriptionOptIncrementSubscription; }
+	SubscriptionOpts& IncrementSubscription(bool value = true) {
+		options = value ? options | kSubscriptionOptIncrementSubscription : options & ~(kSubscriptionOptIncrementSubscription);
+		return *this;
+	}
+#endif
+	uint16_t options;
+} SubscriptionOpts;

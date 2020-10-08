@@ -8,7 +8,7 @@
 
 #include "errors.h"
 #include "tools/oscompat.h"
-#include "tools/logger.h"
+#include "tools/stringstools.h"
 
 namespace reindexer {
 namespace fs {
@@ -25,10 +25,7 @@ int MkDirAll(const string &path) {
 		if (*p == '/' || *p == '\\') {
 			*p = 0;
 			err = mkdir(tmp, S_IRWXU);
-			if ((err < 0) && (errno != EEXIST) && (errno != EACCES)) {
-                return err;
-            }
-
+			if ((err < 0) && (errno != EEXIST)) return err;
 			*p = '/';
 		}
 	}
@@ -57,6 +54,17 @@ int ReadFile(const string &path, string &content) {
 	auto nread = fread(&content[0], 1, sz, f);
 	fclose(f);
 	return nread;
+}
+
+int64_t WriteFile(const std::string &path, string_view content) {
+	FILE *f = fopen(path.c_str(), "w");
+	if (!f) {
+		return -1;
+	}
+	auto written = fwrite(content.data(), content.size(), 1, f);
+	fflush(f);
+	fclose(f);
+	return static_cast<int64_t>((written > 0) ? content.size() : written);
 }
 
 int ReadDir(const string &path, vector<DirEntry> &content) {
@@ -114,17 +122,15 @@ string GetTempDir() {
 	::GetTempPathA(sizeof(tmpBuf), tmpBuf);
 	return tmpBuf;
 #else
-	if (const char *tmpDir = getenv("TMPDIR")) {
-		if (tmpDir && *tmpDir) return tmpDir;
-	}
+	const char *tmpDir = getenv("TMPDIR");
+	if (tmpDir && *tmpDir) return tmpDir;
 	return "/tmp";
 #endif
 }
 
 string GetHomeDir() {
-	if (const char *homeDir = getenv("HOME")) {
-		if (homeDir && *homeDir) return homeDir;
-	}
+	const char *homeDir = getenv("HOME");
+	if (homeDir && *homeDir) return homeDir;
 	return ".";
 }
 
@@ -138,6 +144,40 @@ FileStatus Stat(const string &path) {
 	if (stat(path.c_str(), &state) < 0) return StatError;
 	return S_ISDIR(state.st_mode) ? StatDir : StatFile;
 #endif
+}
+
+TimeStats StatTime(const std::string &path) {
+#ifdef _WIN32
+	FILETIME ftCreate, ftAccess, ftWrite;
+	HANDLE hFile = CreateFile(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+
+	if (hFile != INVALID_HANDLE_VALUE) {
+		if (GetFileTime(hFile, &ftCreate, &ftAccess, &ftWrite)) {
+			// https://docs.microsoft.com/en-us/windows/win32/sysinfo/file-times
+			// A file time is a 64-bit value that represents the number of 100-nanosecond intervals...
+			return {((int64_t(ftAccess.dwHighDateTime) << 32) + ftAccess.dwLowDateTime) * 100,
+					((int64_t(ftCreate.dwHighDateTime) << 32) + ftCreate.dwLowDateTime) * 100,
+					((int64_t(ftWrite.dwHighDateTime) << 32) + ftWrite.dwLowDateTime) * 100};
+		}
+		CloseHandle(hFile);
+	}
+#else
+	struct stat st;
+	if (stat(path.c_str(), &st) == 0) {
+#if defined(__APPLE__)
+		return {int64_t(st.st_atimespec.tv_sec) * 1000000000 + st.st_atimespec.tv_nsec,
+				int64_t(st.st_ctimespec.tv_sec) * 1000000000 + st.st_ctimespec.tv_nsec,
+				int64_t(st.st_mtimespec.tv_sec) * 1000000000 + st.st_mtimespec.tv_nsec};
+#elif defined(st_mtime)
+		return {int64_t(st.st_atim.tv_sec) * 1000000000 + st.st_atim.tv_nsec, int64_t(st.st_ctim.tv_sec) * 1000000000 + st.st_ctim.tv_nsec,
+				int64_t(st.st_mtim.tv_sec) * 1000000000 + st.st_mtim.tv_nsec};
+#else
+		return {int64_t(st.st_atime) * 1000000000 + st.st_atimensec, int64_t(st.st_ctime) * 1000000000 + st.st_ctimensec,
+				int64_t(st.st_mtime) * 1000000000 + st.st_mtimensec};
+#endif  // defined(__APPLE__)
+	}
+#endif  // _WIN32
+	return {-1, -1, -1};
 }
 
 bool DirectoryExists(const string &directory) {
@@ -179,7 +219,7 @@ Error TryCreateDirectory(const string &dir) {
 
 string GetDirPath(const string &path) {
 	size_t lastSlashPos = path.find_last_of("/\\");
-	return path.substr(0, lastSlashPos + 1);
+	return lastSlashPos == std::string::npos ? string() : path.substr(0, lastSlashPos + 1);
 }
 
 Error ChownDir(const string &path, const string &user) {
@@ -234,5 +274,24 @@ Error ChangeUser(const char *userName) {
 	return 0;
 }
 
+string GetRelativePath(const string &path, unsigned maxUp) {
+	string cwd = GetCwd();
+
+	unsigned same = 0, slashes = 0;
+	for (; same < std::min(cwd.size(), path.size()) && cwd[same] == path[same]; ++same) {
+	}
+	for (unsigned i = same; i < cwd.size(); ++i) {
+		if (cwd[i] == '/' || i == same) slashes++;
+	}
+	if (!slashes && same < path.size()) same++;
+
+	if (same < 2 || (slashes > maxUp)) return path;
+
+	string rpath;
+	rpath.reserve(slashes * 3 + path.size() - same + 1);
+	while (slashes--) rpath += "../";
+	rpath.append(path.begin() + same, path.end());
+	return rpath;
+}
 }  // namespace fs
 }  // namespace reindexer

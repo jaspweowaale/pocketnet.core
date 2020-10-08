@@ -1,10 +1,10 @@
 #pragma once
 
 #include "core/keyvalue/variant.h"
+#include "estl/span.h"
 #include "tools/errors.h"
 
 namespace reindexer {
-
 using std::vector;
 
 namespace client {
@@ -14,12 +14,12 @@ class Namespace;
 
 class ItemImpl;
 class FieldRefImpl;
+class Replicator;
 
 /// Item is the interface for data manipulating. It holds and control one database document (record)<br>
-/// *Lifetime*: Item is uses Copy-On-Write semantics, and have independent lifetime and state - e.g., aquired from Reindexer Item will not
-/// changed externally, even in case, when data in database was changed, or deleted.
-/// *Thread safety*: Item is thread safe againist Reindexer, but not thread safe itself.
-/// Usage of single Item from different threads will race
+/// *Lifetime*: Item is uses Copy-On-Write semantics, and have independent lifetime and state - e.g., aquired from Reindexer Item will
+/// not changed externally, even in case, when data in database was changed, or deleted. *Thread safety*: Item is thread safe against
+/// Reindexer, but not thread safe itself. Usage of single Item from different threads will race
 
 class Item {
 public:
@@ -64,13 +64,14 @@ public:
 		/// @tparam T - type. Must be one of: int, int64_t, double
 		/// @param arr - std::vector of T values, which will be setted to field
 		template <typename T>
+		FieldRef &operator=(span<T> arr);
+		/// Set array of values to field
+		/// @tparam T - type. Must be one of: int, int64_t, double
+		/// @param arr - std::vector of T values, which will be setted to field
+		template <typename T>
 		FieldRef &operator=(const std::vector<T> &arr) {
-			VariantArray krs;
-			krs.reserve(arr.size());
-			for (auto &t : arr) krs.push_back(Variant(t));
-			return operator=(krs);
+			return operator=(span<T>(arr));
 		}
-
 		/// Set string value to field
 		/// If Item is in Unsafe Mode, then Item will not store str, but just keep pointer to str,
 		/// application *MUST* hold str until end of life of Item
@@ -80,10 +81,10 @@ public:
 		/// If Item is in Unsafe Mode, then Item will not store str, but just keep pointer to str,
 		/// application *MUST* hold str until end of life of Item
 		/// @param str - std::string, which will be setted to field
-		FieldRef &operator=(const string &str);
+		FieldRef &operator=(const std::string &str);
 
 		/// Get field index name
-		const string &Name();
+		string_view Name() const;
 
 		/// Get Variant with field value
 		/// If field is array, and contains not exact 1 element, then throws reindexer::Error
@@ -91,7 +92,7 @@ public:
 		operator Variant();
 		/// Get VariantArray with field values. If field is not array, then 1 elemnt will be returned
 		/// @return VariantArray with field values
-		operator VariantArray();
+		operator VariantArray() const;
 		/// Set field value
 		/// @param kr - key reference object, which will be setted to field
 		FieldRef &operator=(Variant kr);
@@ -101,9 +102,9 @@ public:
 
 	private:
 		FieldRef(int field, ItemImpl *itemImpl);
-		FieldRef(const string &jsonPath, ItemImpl *itemImpl);
+		FieldRef(string_view jsonPath, ItemImpl *itemImpl);
 		ItemImpl *itemImpl_;
-		std::string jsonPath_;
+		string_view jsonPath_;
 		int field_;
 	};
 
@@ -113,27 +114,36 @@ public:
 	/// @param slice - data slice with Json.
 	/// @param endp - pointer to end of parsed part of slice
 	/// @param pkOnly - if TRUE, that mean a JSON string will be parse only primary key fields
-	Error FromJSON(const string_view &slice, char **endp = nullptr, bool pkOnly = false);
+	Error FromJSON(string_view slice, char **endp = nullptr, bool pkOnly = false);
 
 	/// Build item from JSON<br>
 	/// If Item is in *Unsafe Mode*, then Item will not store slice, but just keep pointer to data in slice,
 	/// application *MUST* hold slice until end of life of Item
 	/// @param slice - data slice with CJson
 	/// @param pkOnly - if TRUE, that mean a JSON string will be parse only primary key fields
-	Error FromCJSON(const string_view &slice, bool pkOnly = false);
+	Error FromCJSON(string_view slice, bool pkOnly = false);
+
+	/// Builds item from msgpack::object.
+	/// @param sbuf - msgpack encoded data buffer.
+	/// @param offset - position to start from.
+	Error FromMsgPack(string_view buf, size_t &offset);
+
+	/// Packs data in msgpack format
+	/// @param wrser - buffer to serialize data to
+	Error GetMsgPack(WrSerializer &wrser);
 
 	/// Serialize item to CJSON.<br>
-	/// If Item is in *Unfafe Mode*, then returned slice is allocated in temporary buffer, and can be invalidated by any next operation with
-	/// Item
+	/// If Item is in *Unfafe Mode*, then returned slice is allocated in temporary buffer, and can be invalidated by any next operation
+	/// with Item
 	/// @return data slice with CJSON
 	string_view GetCJSON();
 	/// Serialize item to JSON.<br>
-	/// @return data slice with JSON. Returned slice is allocated in temporary Item's buffer, and can be invalidated by any next operation
-	/// with Item
+	/// @return data slice with JSON. Returned slice is allocated in temporary Item's buffer, and can be invalidated by any next
+	/// operation with Item
 	string_view GetJSON();
 	/// Get status of item
-	/// @return data slice with JSON. Returned slice is allocated in temporary Item's buffer, and can be invalidated by any next operation
-	/// with Item
+	/// @return data slice with JSON. Returned slice is allocated in temporary Item's buffer, and can be invalidated by any next
+	/// operation with Item
 	Error Status() { return status_; }
 	/// Get internal ID of item
 	/// @return ID of item
@@ -147,18 +157,16 @@ public:
 	/// Get field by number
 	/// @param field - number of field. Must be >= 0 && < NumFields
 	/// @return FieldRef which contains reference to indexed field
-	FieldRef operator[](int field);
+	FieldRef operator[](int field) const;
 	/// Get field by name
 	/// @param name - name of field
 	/// @return FieldRef which contains reference to indexed field
-	FieldRef operator[](const string &name);
-	/// Get field by name
-	/// @param name - name of field
-	/// @return FieldRef which contains reference to indexed field
-	FieldRef operator[](const char *name);
+	FieldRef operator[](string_view name) const;
+	/// Get PK fields
+	FieldsSet PkFields() const;
 	/// Set additional percepts for modify operation
 	/// @param precepts - strings in format "fieldName=Func()"
-	void SetPrecepts(const vector<string> &precepts);
+	void SetPrecepts(const vector<std::string> &precepts);
 	/// Check was names tags updated while modify operation
 	/// @return true: tags was updated.
 	bool IsTagsUpdated();
@@ -166,7 +174,7 @@ public:
 	/// @return Current state token
 	int GetStateToken();
 	/// Check is item valid. If is not valid, then any futher operations with item will raise nullptr dereference
-	operator bool() const { return impl_ != nullptr; }
+	bool operator!() const { return impl_ == nullptr; }
 	/// Enable Unsafe Mode<br>.
 	/// USE WITH CAUTION. In unsafe mode most of Item methods will not store  strings and slices, passed from/to application.<br>
 	/// The advantage of unsafe mode is speed. It does not call extra memory allocation from heap and copying data.<br>
@@ -183,9 +191,13 @@ private:
 	ItemImpl *impl_;
 	Error status_;
 	int id_ = -1;
-	friend class Namespace;
+	friend class NamespaceImpl;
+	friend class TransactionImpl;
+
 	friend class QueryResults;
 	friend class ReindexerImpl;
+	friend class Replicator;
+	friend class TransactionStep;
 	friend class client::ReindexerImpl;
 	friend class client::Namespace;
 };

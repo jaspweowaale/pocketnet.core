@@ -1,24 +1,18 @@
 
 #include "indextext.h"
-#include <chrono>
 #include <memory>
-#include <thread>
-#include "core/ft/bm25.h"
-#include "core/ft/ft_fuzzy/searchers/kblayout.h"
-#include "core/ft/ft_fuzzy/searchers/translit.h"
+#include "core/ft/filters/kblayout.h"
+#include "core/ft/filters/synonyms.h"
+#include "core/ft/filters/translit.h"
+#include "core/rdxcontext.h"
+#include "estl/smart_lock.h"
 #include "tools/errors.h"
 #include "tools/logger.h"
-#include "tools/stringstools.h"
-#include "utf8cpp/utf8.h"
+
 namespace reindexer {
 
 // Available stemmers for languages
 const char *stemLangs[] = {"en", "ru", "nl", "fin", "de", "da", "fr", "it", "hu", "no", "pt", "ro", "es", "sv", "tr", nullptr};
-
-using std::chrono::duration_cast;
-using std::chrono::high_resolution_clock;
-using std::chrono::milliseconds;
-using std::thread;
 
 template <typename T>
 IndexText<T>::IndexText(const IndexText<T> &other) : IndexUnordered<T>(other), cache_ft_(new FtIdSetCache), isBuilt_(false) {
@@ -28,10 +22,10 @@ IndexText<T>::IndexText(const IndexText<T> &other) : IndexUnordered<T>(other), c
 
 template <typename T>
 void IndexText<T>::initSearchers() {
-	holder_.searchers_.clear();
 	holder_.stemmers_.clear();
-	holder_.searchers_.push_back(search_engine::ISeacher::Ptr(new search_engine::Translit));
-	holder_.searchers_.push_back(search_engine::ISeacher::Ptr(new search_engine::KbLayout));
+	holder_.translit_.reset(new Translit);
+	holder_.kbLayout_.reset(new KbLayout);
+	holder_.synonyms_.reset(new Synonyms);
 	for (const char **lang = stemLangs; *lang; ++lang) {
 		holder_.stemmers_.emplace(*lang, *lang);
 	}
@@ -64,15 +58,21 @@ void IndexText<T>::SetOpts(const IndexOpts &opts) {
 	this->opts_ = opts;
 
 	if (oldCfg != opts.config) {
-		auto newCfg = this->opts_.config;
-		cfg_->parse(&newCfg[0]);
+		try {
+			cfg_->parse(this->opts_.config);
+		} catch (...) {
+			this->opts_.config = oldCfg;
+			cfg_->parse(this->opts_.config);
+			throw;
+		}
 	}
 }
 
 // Generic implemetation for string index
 template <typename T>
-SelectKeyResults IndexText<T>::SelectKey(const VariantArray &keys, CondType condition, SortType /*stype*/, Index::ResultType /*res_type*/,
-										 BaseFunctionCtx::Ptr ctx) {
+SelectKeyResults IndexText<T>::SelectKey(const VariantArray &keys, CondType condition, SortType /*stype*/, Index::SelectOpts /*opts*/,
+										 BaseFunctionCtx::Ptr ctx, const RdxContext &rdxCtx) {
+	const auto indexWard(rdxCtx.BeforeIndexWork());
 	if (keys.size() < 1 || (condition != CondEq && condition != CondSet)) {
 		throw Error(errParams, "Full text index support only EQ or SET condition with 1 or 2 parameter");
 	}
@@ -82,16 +82,17 @@ SelectKeyResults IndexText<T>::SelectKey(const VariantArray &keys, CondType cond
 	ftctx->PrepareAreas(ftFields_, this->name_);
 
 	bool need_put = false;
-	auto cache_ft = cache_ft_->Get(IdSetCacheKey{keys, condition, 0});
+	IdSetCacheKey ckey{keys, condition, 0};
+	auto cache_ft = cache_ft_->Get(ckey);
 	SelectKeyResult res;
-	if (cache_ft.key) {
+	if (cache_ft.valid) {
 		if (!cache_ft.val.ids->size() || (ftctx->NeedArea() && !cache_ft.val.ctx->need_area_)) {
 			need_put = true;
 		} else {
-			logPrintf(LogInfo, "Get search results for '%s' in '%s' from cache", keys[0].As<string>().c_str(),
-					  this->payloadType_ ? this->payloadType_->Name().c_str() : "");
+			logPrintf(LogInfo, "Get search results for '%s' in '%s' from cache", keys[0].As<string>(),
+					  this->payloadType_ ? this->payloadType_->Name() : "");
 			res.push_back(SingleSelectKeyResult(cache_ft.val.ids));
-			SelectKeyResults r(res);
+			SelectKeyResults r(std::move(res));
 			assert(cache_ft.val.ctx);
 			ftctx->SetData(cache_ft.val.ctx);
 			return r;
@@ -99,19 +100,19 @@ SelectKeyResults IndexText<T>::SelectKey(const VariantArray &keys, CondType cond
 	}
 
 	if (cfg_->logLevel >= LogInfo) {
-		logPrintf(LogInfo, "Searching for '%s' in '%s' %s", keys[0].As<string>().c_str(),
-				  this->payloadType_ ? this->payloadType_->Name().c_str() : "", need_put ? "(will cache)" : "");
+		logPrintf(LogInfo, "Searching for '%s' in '%s' %s", keys[0].As<string>(), this->payloadType_ ? this->payloadType_->Name() : "",
+				  need_put ? "(will cache)" : "");
 	}
 
 	// STEP 1: Parse search query dsl
 	FtDSLQuery dsl(this->ftFields_, this->cfg_->stopWords, this->cfg_->extraWordSymbols);
 	dsl.parse(keys[0].As<string>());
 
-	smart_lock<shared_timed_mutex> lck(mtx_);
+	smart_lock<Mutex> lck(mtx_, rdxCtx);
 	if (!isBuilt_) {
 		// non atomic upgrade mutex to unique
 		lck.unlock();
-		lck = smart_lock<shared_timed_mutex>(mtx_, true);
+		lck = smart_lock<Mutex>(mtx_, rdxCtx, true);
 		if (!isBuilt_) {
 			commitFulltext();
 			need_put = false;
@@ -121,22 +122,19 @@ SelectKeyResults IndexText<T>::SelectKey(const VariantArray &keys, CondType cond
 
 	auto mergedIds = Select(ftctx, dsl);
 	if (mergedIds) {
-		if (need_put && mergedIds->size()) cache_ft_->Put(*cache_ft.key, FtIdSetCacheVal{mergedIds, ftctx->GetData()});
+		if (need_put && mergedIds->size()) cache_ft_->Put(ckey, FtIdSetCacheVal{mergedIds, ftctx->GetData()});
 
 		res.push_back(SingleSelectKeyResult(mergedIds));
 	}
-	SelectKeyResults r(res);
-	return r;
+	return SelectKeyResults(std::move(res));
 }
 
 template <typename T>
-FieldsGetter<T> IndexText<T>::Getter() {
-	return FieldsGetter<T>(this->fields_, this->payloadType_, this->KeyType());
+FieldsGetter IndexText<T>::Getter() {
+	return FieldsGetter(this->fields_, this->payloadType_, this->KeyType());
 }
 
-template class IndexText<unordered_str_map<Index::KeyEntryPlain>>;
-template class IndexText<unordered_payload_map<Index::KeyEntryPlain>>;
-template class IndexText<unordered_str_map<FtFastKeyEntry>>;
-template class IndexText<unordered_payload_map<FtFastKeyEntry>>;
+template class IndexText<unordered_str_map<FtKeyEntry>>;
+template class IndexText<unordered_payload_map<FtKeyEntry, true>>;
 
 }  // namespace reindexer

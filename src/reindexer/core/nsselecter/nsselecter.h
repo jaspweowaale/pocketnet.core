@@ -1,111 +1,76 @@
 #pragma once
-#include <chrono>
-#include <functional>
-#include "core/aggregator.h"
+#include "aggregator.h"
 #include "core/index/index.h"
-#include "core/nsselecter/selectiterator.h"
-#include "core/query/query.h"
-#include "core/query/queryresults.h"
-#include "core/selectfunc/ctx/basefunctionctx.h"
-#include "core/selectfunc/ctx/ftctx.h"
-#include "core/selectfunc/selectfunc.h"
+#include "joinedselector.h"
+#include "sortingcontext.h"
 
 namespace reindexer {
 
-using std::string;
-using std::vector;
-using std::chrono::duration_cast;
-using std::chrono::microseconds;
-
-struct JoinedSelector {
-	typedef std::function<bool(IdType, int nsId, ConstPayload, bool)> FuncType;
-	JoinType type;
-	bool nodata;
-	FuncType func;
-	int called, matched;
-	string ns;
-};
-
 typedef vector<JoinedSelector> JoinedSelectors;
-
 struct SelectCtx {
 	explicit SelectCtx(const Query &query_) : query(query_) {}
 	const Query &query;
 	JoinedSelectors *joinedSelectors = nullptr;
-
 	SelectFunctionsHolder *functions = nullptr;
-	struct PreResult {
-		enum Mode { ModeBuild, ModeIterators, ModeIdSet, ModeEmpty };
 
-		typedef shared_ptr<PreResult> Ptr;
-		IdSet ids;
-		h_vector<SelectIterator, 0> iterators;
-		Mode mode = ModeEmpty;
-		bool enableSortOrders = false;
-	};
-	struct SortingCtx {
-		struct Entry {
-			const SortingEntry *data = nullptr;
-			Index *index = nullptr;
-			const CollateOpts *opts = nullptr;
-		};
-		h_vector<Entry, 1> entries;
-		Index *sortIndex() { return entries.empty() ? nullptr : entries[0].index; }
-		int sortId() { return sortIndex() ? sortIndex()->SortId() : 0; }
-	};
-	PreResult::Ptr preResult;
-	SortingCtx sortingCtx;
+	JoinPreResult::Ptr preResult;
+	SortingContext sortingContext;
 	uint8_t nsid = 0;
 	bool isForceAll = false;
 	bool skipIndexesLookup = false;
 	bool matchedAtLeastOnce = false;
 	bool reqMatchedOnceFlag = false;
-	bool enableSortOrders = false;
+	bool contextCollectingMode = false;
 };
+
+class ItemComparator;
+class ExplainCalc;
+class QueryPreprocessor;
 
 class NsSelecter {
 public:
-	NsSelecter(Namespace *parent) : ns_(parent) {}
-	struct RawQueryResult : public h_vector<SelectIterator> {};
+	NsSelecter(NamespaceImpl *parent) : ns_(parent) {}
 
-	void operator()(QueryResults &result, SelectCtx &ctx);
+	void operator()(QueryResults &result, SelectCtx &ctx, const RdxContext &);
 
 private:
 	struct LoopCtx {
-		LoopCtx(SelectCtx &ctx) : sctx(ctx) {}
-		RawQueryResult *qres = nullptr;
+		LoopCtx(SelectIteratorContainer &sIt, SelectCtx &ctx, const QueryPreprocessor &qpp, h_vector<Aggregator, 4> &agg, ExplainCalc &expl)
+			: qres(sIt), sctx(ctx), qPreproc(qpp), aggregators(agg), explain(expl) {}
+		SelectIteratorContainer &qres;
 		bool calcTotal = false;
 		SelectCtx &sctx;
+		const QueryPreprocessor &qPreproc;
+		h_vector<Aggregator, 4> &aggregators;
+		ExplainCalc &explain;
+		unsigned start = 0;
+		unsigned count = UINT_MAX;
 	};
 
-	template <bool reverse, bool haveComparators, bool haveDistinct>
-	void selectLoop(LoopCtx &ctx, QueryResults &result);
-	void applyCustomSort(ItemRefVector &result, const SelectCtx &ctx);
+	template <bool reverse, bool haveComparators, bool aggregationsOnly>
+	void selectLoop(LoopCtx &ctx, QueryResults &result, const RdxContext &);
+	template <bool desc, bool multiColumnSort, typename It>
+	It applyForcedSort(It begin, It end, const ItemComparator &, const SelectCtx &ctx);
+	template <typename It>
+	void applyGeneralSort(It itFirst, It itLast, It itEnd, const ItemComparator &, const SelectCtx &ctx);
 
-	using ItemIterator = ItemRefVector::iterator;
-	using ConstItemIterator = const ItemIterator &;
-	void applyGeneralSort(ConstItemIterator itFirst, ConstItemIterator itLast, ConstItemIterator itEnd, const SelectCtx &ctx);
-
-	bool containsFullTextIndexes(const QueryEntries &entries);
-	void prepareIteratorsForSelectLoop(const QueryEntries &entries, RawQueryResult &result, SortType sortId, bool is_ft);
-	void prepareEqualPositionComparator(const Query &query, const QueryEntries &entries, RawQueryResult &result);
-	void addSelectResult(uint8_t proc, IdType rowId, IdType properRowId, const SelectCtx &sctx, h_vector<Aggregator, 4> &aggregators,
+	template <bool aggregationsOnly>
+	void addSelectResult(uint8_t proc, IdType rowId, IdType properRowId, SelectCtx &sctx, h_vector<Aggregator, 4> &aggregators,
 						 QueryResults &result);
-	QueryEntries lookupQueryIndexes(const QueryEntries &entries);
-	void convertWhereValues(QueryEntries &entries);
-	void substituteCompositeIndexes(QueryEntries &entries);
-	SortingEntries detectOptimalSortOrder(const QueryEntries &entries);
-	h_vector<Aggregator, 4> getAggregators(const Query &q);
-	int getCompositeIndex(const FieldsSet &fieldsmask);
-	bool mergeQueryEntries(QueryEntry *lhs, QueryEntry *rhs);
-	void setLimitAndOffset(ItemRefVector &result, size_t offset, size_t limit);
-	KeyValueType detectQueryEntryIndexType(const QueryEntry &qentry) const;
-	void prepareSortingContext(const SortingEntries &sortBy, SelectCtx &ctx, bool isFt);
-	void prepareSortingIndexes(SortingEntries &sortBy);
-	void getSortIndexValue(const SelectCtx::SortingCtx::Entry *sortCtx, IdType rowId, VariantArray &value);
-	bool proccessJoin(SelectCtx &sctx, IdType properRowId, bool found, bool match, bool hasInnerJoin);
 
-	Namespace *ns_;
+	h_vector<Aggregator, 4> getAggregators(const Query &) const;
+	void setLimitAndOffset(ItemRefVector &result, size_t offset, size_t limit);
+	void prepareSortingContext(SortingEntries &sortBy, SelectCtx &ctx, bool isFt, bool availableSelectBySortIndex);
+	void getSortIndexValue(const SortingContext &sortCtx, IdType rowId, VariantArray &value, uint8_t proc, joins::NamespaceResults &,
+						   const JoinedSelectors &);
+	void processLeftJoins(QueryResults &qr, SelectCtx &sctx, size_t startPos);
+	bool checkIfThereAreLeftJoins(SelectCtx &sctx) const;
+	template <typename It>
+	void sortResults(LoopCtx &sctx, It begin, It end, const SortingOptions &sortingOptions);
+
+	bool isSortOptimizatonEffective(const QueryEntries &qe, SelectCtx &ctx, const RdxContext &rdxCtx);
+
+	NamespaceImpl *ns_;
 	SelectFunction::Ptr fnc_;
 	FtCtx::Ptr ft_ctx_;
 };

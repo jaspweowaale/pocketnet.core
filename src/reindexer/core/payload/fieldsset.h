@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include "core/cjson/tagsmatcher.h"
-#include "core/query/querywhere.h"
 #include "core/type_consts.h"
 #include "estl/h_vector.h"
 
@@ -20,7 +19,7 @@ public:
 	using base_fields_set::size;
 	using base_fields_set::empty;
 	using base_fields_set::operator[];
-	FieldsSet(const TagsMatcher &tagsMatcher, const h_vector<string, 4> &fields) : mask_(0) {
+	FieldsSet(const TagsMatcher &tagsMatcher, const h_vector<string, 1> &fields) : mask_(0) {
 		for (auto &str : fields) tagsPaths_.push_back(tagsMatcher.path2tag(str));
 	}
 

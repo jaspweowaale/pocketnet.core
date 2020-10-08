@@ -14,7 +14,12 @@ using std::unique_ptr;
 template <typename T>
 class FastIndexText : public IndexText<T> {
 public:
-	FastIndexText(const FastIndexText<T>& other) : IndexText<T>(other) { CreateConfig(other.GetConfig()); }
+	FastIndexText(const FastIndexText<T>& other) : IndexText<T>(other) {
+		CreateConfig(other.GetConfig());
+		for (auto& idx : this->idx_map) idx.second.VDocID() = FtKeyEntryData::ndoc;
+		commitFulltext();
+		this->isBuilt_ = true;
+	}
 
 	FastIndexText(const IndexDef& idef, const PayloadType payloadType, const FieldsSet& fields) : IndexText<T>(idef, payloadType, fields) {
 		CreateConfig();
@@ -25,6 +30,7 @@ public:
 	IndexMemStat GetMemStat() override;
 	Variant Upsert(const Variant& key, IdType id) override final;
 	void Delete(const Variant& key, IdType id) override final;
+	void SetOpts(const IndexOpts& opts) override final;
 
 protected:
 	FtFastConfig* GetConfig() const;
@@ -32,10 +38,6 @@ protected:
 
 	template <class Data>
 	void BuildVdocs(Data& data);
-
-	void initSearchers();
-
-	const typename T::mapped_type* GetEntry(const void* entry);
 };
 
 Index* FastIndexText_New(const IndexDef& idef, const PayloadType payloadType, const FieldsSet& fields);

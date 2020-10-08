@@ -12,6 +12,7 @@ namespace reindexer {
 
 using std::move;
 using std::string;
+
 struct p_string;
 class chunk;
 
@@ -31,9 +32,12 @@ public:
 	uint64_t GetVarUint();
 	string_view GetVString();
 	p_string GetPVString();
+	p_string GetPSlice();
 	bool GetBool();
 	size_t Pos() { return pos; }
 	void SetPos(size_t p) { pos = p; }
+	const uint8_t *Buf() const { return buf; }
+	size_t Len() const { return len; }
 
 protected:
 	const uint8_t *buf;
@@ -91,9 +95,17 @@ public:
 
 	struct SliceHelper {
 		SliceHelper(WrSerializer *ser, size_t pos) : ser_(ser), pos_(pos) {}
-		SliceHelper(const WrSerializer &) = delete;
-		SliceHelper operator=(const WrSerializer &) = delete;
-		SliceHelper(SliceHelper &&other) noexcept : ser_(other.ser_), pos_(other.pos_) { other.ser_ = nullptr; };
+		SliceHelper(const SliceHelper &) = delete;
+		SliceHelper operator=(const SliceHelper &) = delete;
+		SliceHelper(SliceHelper &&other) noexcept : ser_(other.ser_), pos_(other.pos_) { other.ser_ = nullptr; }
+		SliceHelper &operator=(SliceHelper &&other) noexcept {
+			if (this != &other) {
+				ser_ = other.ser_;
+				pos_ = other.pos_;
+				other.ser_ = nullptr;
+			}
+			return *this;
+		}
 		~SliceHelper();
 
 		WrSerializer *ser_;
@@ -106,12 +118,6 @@ public:
 	void PutUInt32(uint32_t);
 	void PutUInt64(uint64_t);
 	void PutDouble(double);
-
-	void Printf(const char *fmt, ...)
-#ifndef _MSC_VER
-		__attribute__((format(printf, 2, 3)))
-#endif
-		;
 
 	template <typename T, typename std::enable_if<sizeof(T) == 8 && std::is_integral<T>::value>::type * = nullptr>
 	WrSerializer &operator<<(T k) {
@@ -133,7 +139,7 @@ public:
 		buf_[len_++] = c;
 		return *this;
 	}
-	WrSerializer &operator<<(const string_view &sv) {
+	WrSerializer &operator<<(string_view sv) {
 		Write(sv);
 		return *this;
 	}
@@ -142,17 +148,14 @@ public:
 		return *this;
 	}
 	WrSerializer &operator<<(bool v) {
-		Write(v ? "true" : "false");
+		Write(v ? "true"_sv : "false"_sv);
 		return *this;
 	}
-	WrSerializer &operator<<(double v) {
-		grow(32);
-		len_ += snprintf(reinterpret_cast<char *>(buf_ + len_), 32, "%.20g", v);
-		return *this;
-	}
+	WrSerializer &operator<<(double v);
 
-	void PrintJsonString(const string_view &str);
-	void PrintHexDump(const string_view &str);
+	void PrintJsonString(string_view str);
+	void PrintHexDump(string_view str);
+	void Fill(char c, size_t count);
 
 	template <typename T, typename std::enable_if<sizeof(T) == 8 && std::is_integral<T>::value>::type * = nullptr>
 	void PutVarint(T v) {
@@ -186,14 +189,16 @@ public:
 	}
 
 	void PutBool(bool v);
-	void PutVString(const string_view &str);
+	void PutVString(string_view str);
 
 	// Buffer manipulation functions
-	void Write(const string_view &buf);
+	void Write(string_view buf);
 	uint8_t *Buf() const;
+	std::unique_ptr<uint8_t[]> DetachBuf();
 	chunk DetachChunk();
-	void Reset() { len_ = 0; }
+	void Reset(size_t len = 0) { len_ = len; }
 	size_t Len() const { return len_; }
+	size_t Cap() const { return cap_; }
 	void Reserve(size_t cap);
 	string_view Slice() const { return string_view(reinterpret_cast<const char *>(buf_), len_); }
 	const char *c_str() {
@@ -207,7 +212,9 @@ protected:
 	uint8_t *buf_;
 	size_t len_;
 	size_t cap_;
-	uint8_t inBuf_[0x200];
+	uint8_t inBuf_[0x100];
 };
+
+int msgpack_wrserializer_write(void *data, const char *buf, size_t len);
 
 }  // namespace reindexer

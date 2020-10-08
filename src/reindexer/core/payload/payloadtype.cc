@@ -26,8 +26,8 @@ void PayloadTypeImpl::Add(PayloadFieldType f) {
 	if (it != fieldsByName_.end()) {
 		// Non unique name -> check type, and upgrade to array if types are the same
 		auto &oldf = fields_[it->second];
-		throw Error(errLogic, "Can't add field with name '%s' and type '%s' to namespace '%s'. It already exists with type '%s'",
-					f.Name().c_str(), Variant::TypeName(f.Type()), Name().c_str(), Variant::TypeName(oldf.Type()));
+		throw Error(errLogic, "Can't add field with name '%s' and type '%s' to namespace '%s'. It already exists with type '%s'", f.Name(),
+					Variant::TypeName(f.Type()), Name(), Variant::TypeName(oldf.Type()));
 	} else {
 		// Unique name -> just add field
 		f.SetOffset(TotalSize());
@@ -36,7 +36,7 @@ void PayloadTypeImpl::Add(PayloadFieldType f) {
 			auto res = fieldsByJsonPath_.emplace(jp, int(fields_.size()));
 			if (!res.second && res.first->second != int(fields_.size())) {
 				throw Error(errLogic, "Can't add field with name '%s' to namespace '%s'. Json path '%s' already used in field '%s'",
-							f.Name().c_str(), Name().c_str(), jp.c_str(), Field(res.first->second).Name().c_str());
+							f.Name(), Name(), jp, Field(res.first->second).Name());
 			}
 		}
 		fieldsByName_.emplace(f.Name(), int(fields_.size()));
@@ -47,7 +47,7 @@ void PayloadTypeImpl::Add(PayloadFieldType f) {
 	}
 }
 
-bool PayloadTypeImpl::Drop(const string &field) {
+bool PayloadTypeImpl::Drop(string_view field) {
 	auto it = fieldsByName_.find(field);
 	if (it == fieldsByName_.end()) return false;
 
@@ -69,34 +69,41 @@ bool PayloadTypeImpl::Drop(const string &field) {
 		++it;
 	}
 
-	fieldsByJsonPath_.erase(field);
-	fieldsByName_.erase(field);
+	for (auto &jp : fields_[fieldIdx].JsonPaths()) {
+		fieldsByJsonPath_.erase(jp);
+	}
 
 	fields_.erase(fields_.begin() + fieldIdx);
 	for (size_t idx = static_cast<size_t>(fieldIdx); idx < fields_.size(); ++idx) {
-		const PayloadFieldType &plTypePrev(fields_[idx - 1]);
-		fields_[idx].SetOffset(plTypePrev.Offset() + plTypePrev.Sizeof());
+		if (idx == 0) {
+			fields_[idx].SetOffset(0);
+		} else {
+			const PayloadFieldType &plTypePrev(fields_[idx - 1]);
+			fields_[idx].SetOffset(plTypePrev.Offset() + plTypePrev.Sizeof());
+		}
 	}
+
+	fieldsByName_.erase(field);
 
 	return true;
 }
 
-bool PayloadTypeImpl::Contains(const string &field) const { return fieldsByName_.find(field) != fieldsByName_.end(); }
+bool PayloadTypeImpl::Contains(string_view field) const { return fieldsByName_.find(field) != fieldsByName_.end(); }
 
-int PayloadTypeImpl::FieldByName(const string &field) const {
+int PayloadTypeImpl::FieldByName(string_view field) const {
 	auto it = fieldsByName_.find(field);
-	if (it == fieldsByName_.end()) throw Error(errLogic, "Field '%s' not found in namespace '%s'", field.c_str(), Name().c_str());
+	if (it == fieldsByName_.end()) throw Error(errLogic, "Field '%s' not found in namespace '%s'", field, Name());
 	return it->second;
 }
 
-bool PayloadTypeImpl::FieldByName(const string &name, int &field) const {
+bool PayloadTypeImpl::FieldByName(string_view name, int &field) const {
 	auto it = fieldsByName_.find(name);
 	if (it == fieldsByName_.end()) return false;
 	field = it->second;
 	return true;
 }
 
-int PayloadTypeImpl::FieldByJsonPath(const string &jsonPath) const {
+int PayloadTypeImpl::FieldByJsonPath(string_view jsonPath) const {
 	auto it = fieldsByJsonPath_.find(jsonPath);
 	if (it == fieldsByJsonPath_.end()) return -1;
 	return it->second;
@@ -128,14 +135,14 @@ void PayloadTypeImpl::deserialize(Serializer &ser) {
 
 	for (int i = 0; i < count; i++) {
 		KeyValueType t = KeyValueType(ser.GetVarUint());
-		string name = ser.GetVString().ToString();
+		string name(ser.GetVString());
 		h_vector<string, 0> jsonPaths;
 		int offset = ser.GetVarUint();
 		int elemSizeof = ser.GetVarUint();
 		bool isArray = ser.GetVarUint();
 		int jsonPathsCount = ser.GetVarUint();
 
-		while (jsonPathsCount--) jsonPaths.push_back(ser.GetVString().ToString());
+		while (jsonPathsCount--) jsonPaths.push_back(string(ser.GetVString()));
 
 		(void)elemSizeof;
 

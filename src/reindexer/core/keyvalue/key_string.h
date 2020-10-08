@@ -35,7 +35,7 @@ public:
 		uintptr_t pend = pstart + sizeof(string);
 		uintptr_t pdata = uintptr_t(data());
 		return (pdata >= pstart && pdata < pend) ? 0 : capacity();
-	};
+	}
 
 	// delete all modification methods - to be sure, that base_key_string is mutable, and export will not invalidate after construction
 	iterator begin() = delete;
@@ -81,6 +81,8 @@ template <typename... Args>
 key_string make_key_string(Args &&... args) {
 	return key_string(new intrusive_atomic_rc_wrapper<base_key_string>(args...));
 }
+
+inline static bool operator==(const key_string &rhs, const key_string &lhs) { return *rhs == *lhs; }
 
 // Unckecked cast to derived class!
 // It assumes, that all strings in payload are intrusive_ptr and stored with intrusive_atomic_rc_wrapper

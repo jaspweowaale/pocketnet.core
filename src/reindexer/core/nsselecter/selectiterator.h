@@ -17,10 +17,11 @@ public:
 		RevSingleIdset,
 		OnlyComparator,
 		Unsorted,
+		UnbuiltSortOrdersIndex,
 	};
 
 	SelectIterator();
-	SelectIterator(const SelectKeyResult &res, OpType _op, bool _distinct, const string &_name, bool forcedFirst = false);
+	SelectIterator(const SelectKeyResult &res, bool distinct, string name, bool forcedFirst = false);
 
 	/// Starts iteration process: prepares
 	/// object for further work.
@@ -28,7 +29,7 @@ public:
 	void Start(bool reverse);
 	/// Signalizes if iteration is over.
 	/// @return true if iteration is done.
-	inline bool End() { return lastVal_ == (isReverse_ ? INT_MIN : INT_MAX) && !comparators_.size(); }
+	inline bool End() const { return lastVal_ == (isReverse_ ? INT_MIN : INT_MAX) && !comparators_.size(); }
 	/// Iterates to a next item of result.
 	/// @param minHint - rowId value to start from.
 	/// @return true if operation succeed.
@@ -58,6 +59,9 @@ public:
 			case Unsorted:
 				res = nextUnsorted();
 				break;
+			case UnbuiltSortOrdersIndex:
+				res = nextUnbuiltSortOrders();
+				break;
 		}
 		if (res) matchedCount_++;
 		return res;
@@ -67,11 +71,12 @@ public:
 	inline void SetUnsorted() { isUnsorted = true; }
 
 	/// Current rowId
-	int Val() const { return lastVal_; }
+	int Val() const;
+
 	/// Current rowId index since the beginning
 	/// of current SingleKeyValue object.
 	int Pos() const {
-		assert(!lastIt_->useBtree_);
+		assert(!lastIt_->useBtree_ && (type_ != UnbuiltSortOrdersIndex));
 		return lastIt_->it_ - lastIt_->begin_ - 1;
 	}
 
@@ -91,11 +96,11 @@ public:
 		return false;
 	}
 	/// @return amonut of matched items
-	int GetMatchedCount() { return matchedCount_; }
+	int GetMatchedCount() const { return matchedCount_; }
 
 	/// Excludes last set of ids from each result
 	/// to remove duplicated keys
-	void ExcludeLastSet();
+	void ExcludeLastSet(const PayloadValue &, IdType rowId, IdType properRowId);
 
 	/// Appends result to an existing set.
 	/// @param other - results to add.
@@ -110,11 +115,6 @@ public:
 	/// cost goes before others.
 	double Cost(int expectedIterations) const;
 
-	/// Returns total amount of rowIds in all
-	/// the SingleSelectKeyResult objects, i.e.
-	/// maximum amonut of possible iterations.
-	/// @return amount of loops.
-	int GetMaxIterations() const;
 	/// Switches SingleSelectKeyResult to btree search
 	/// mode if it's more efficient than just comparing
 	/// each object in sequence.
@@ -125,9 +125,9 @@ public:
 	const char *TypeName() const;
 	string Dump() const;
 
-	OpType op;
-	bool distinct;
+	bool distinct = false;
 	string name;
+	h_vector<int, 1> joinIndexes;
 
 protected:
 	// Iterates to a next item of result
@@ -139,17 +139,17 @@ protected:
 	bool nextFwdSingleIdset(IdType minHint);
 	bool nextRevSingleRange(IdType minHint);
 	bool nextRevSingleIdset(IdType minHint);
+	bool nextUnbuiltSortOrders();
 	bool nextUnsorted();
 
 	bool isUnsorted = false;
 	bool isReverse_ = false;
-	bool forcedFirst_;
-	int type_;
+	bool forcedFirst_ = false;
+	int type_ = 0;
 	IdType lastVal_ = INT_MIN;
 	iterator lastIt_ = nullptr;
 	IdType end_ = 0;
 	int matchedCount_ = 0;
-	int counter_ = 0;
 };
 
 }  // namespace reindexer

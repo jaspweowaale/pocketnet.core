@@ -18,50 +18,46 @@ class TagsMatcherImpl {
 public:
 	TagsMatcherImpl() : version_(0), stateToken_(rand()) {}
 	TagsMatcherImpl(PayloadType payloadType) : payloadType_(payloadType), version_(0), stateToken_(rand()) {}
-	~TagsMatcherImpl() {
-		//	if (tags2names_.size()) printf("~TagsMatcherImpl::TagsMatcherImpl %d\n", int(tags2names_.size()));
+	~TagsMatcherImpl() {}
+
+	TagsPath path2tag(string_view jsonPath) const {
+		bool updated = false;
+		return const_cast<TagsMatcherImpl *>(this)->path2tag(jsonPath, false, updated);
 	}
 
-	TagsPath path2tag(const string &jsonPath) const {
-		string field;
+	TagsPath path2tag(string_view jsonPath, bool canAdd, bool &updated) {
 		TagsPath fieldTags;
 		for (size_t pos = 0, lastPos = 0; pos != jsonPath.length(); lastPos = pos + 1) {
-			pos = jsonPath.find(".", lastPos);
-			if (pos == string::npos) {
+			pos = jsonPath.find('.', lastPos);
+			if (pos == string_view::npos) {
 				pos = jsonPath.length();
 			}
 			if (pos != lastPos) {
-				field.assign(jsonPath.data() + lastPos, pos - lastPos);
-				int fieldTag = name2tag(field.c_str());
+				string_view field = jsonPath.substr(lastPos, pos - lastPos);
+				int fieldTag = name2tag(field, canAdd, updated);
+				if (!fieldTag) {
+					fieldTags.clear();
+					return fieldTags;
+				}
 				fieldTags.push_back(static_cast<int16_t>(fieldTag));
 			}
 		}
 		return fieldTags;
 	}
 
-	int name2tag(const char *name) const {
+	int name2tag(string_view name) const {
 		auto res = names2tags_.find(name);
 		return (res == names2tags_.end()) ? 0 : res->second + 1;
 	}
 
-	int name2tag(const string &name, const string &path, bool &updated) {
-		auto res = names2tags_.emplace(name, tags2names_.size());
-		if (res.second) {
-			tags2names_.push_back(name);
-			version_++;
-		}
-		updated |= res.second;
-		int tag = res.first->second | ((payloadType_->FieldByJsonPath(path) + 1) << ctag::nameBits);
-		return tag + 1;
-	}
-
-	int name2tag(const char *name, bool canAdd, bool &updated) {
-		int tag = name2tag(name);
+	int name2tag(string_view n, bool canAdd, bool &updated) {
+		int tag = name2tag(n);
 		if (tag || !canAdd) return tag;
 
+		string name(n);
 		auto res = names2tags_.emplace(name, tags2names_.size());
 		if (res.second) {
-			tags2names_.push_back(name);
+			tags2names_.emplace_back(std::move(name));
 			version_++;
 		}
 		updated |= res.second;
@@ -74,7 +70,7 @@ public:
 		if (tag == 0) return emptystr;
 
 		if (tag - 1 >= int(tags2names_.size())) {
-			throw Error(errLogic, "Unknown tag %d in cjson", tag);
+			throw Error(errTagsMissmatch, "Unknown tag %d in cjson", tag);
 		}
 
 		return tags2names_[tag - 1];
@@ -94,7 +90,7 @@ public:
 				if (!jsonPath.length()) continue;
 				pathIdx.clear();
 				for (auto &name : split(jsonPath, ".", true, pathParts)) {
-					pathIdx.push_back(name2tag(name.c_str(), true, updated));
+					pathIdx.push_back(name2tag(name, true, updated));
 				}
 				pathCache_.set(pathIdx.data(), pathIdx.size(), i);
 			}
@@ -117,7 +113,7 @@ public:
 		size_t cnt = ser.GetVarUint();
 		tags2names_.resize(cnt);
 		for (size_t tag = 0; tag < tags2names_.size(); ++tag) {
-			string name = ser.GetVString().ToString();
+			string name(ser.GetVString());
 			names2tags_.emplace(name, tag);
 			tags2names_[tag] = name;
 		}
@@ -189,19 +185,6 @@ public:
 	}
 
 protected:
-	struct equal_str {
-		using is_transparent = void;
-		bool operator()(const char *lhs, const string &rhs) const { return !strcmp(lhs, rhs.c_str()); }
-		bool operator()(const string &lhs, const char *rhs) const { return !strcmp(lhs.c_str(), rhs); }
-		bool operator()(const string &lhs, const string &rhs) const { return rhs == lhs; }
-	};
-
-	struct hash_str {
-		using is_transparent = void;
-		size_t operator()(const char *hs) const { return _Hash_bytes(hs, strlen(hs)); }
-		size_t operator()(const string &hs) const { return _Hash_bytes(hs.data(), hs.length()); }
-	};
-
 	fast_hash_map<string, int, hash_str, equal_str> names2tags_;
 	vector<string> tags2names_;
 	PayloadType payloadType_;

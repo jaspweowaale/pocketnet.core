@@ -5,6 +5,8 @@
 #include "estl/fast_hash_map.h"
 #include "estl/fast_hash_set.h"
 #include "math.h"
+#include "sort/pdqsort.hpp"
+
 namespace search_engine {
 using std::vector;
 using std::pair;
@@ -88,13 +90,13 @@ SearchResult BaseMerger::Merge(MergeCtx& ctx) {
 	double max_proc = 0;
 	for (auto& res : *ctx.rusults) {
 		for (auto it = res.data->begin(); it != res.data->end(); ++it) {
-			IDCtx id_ctx{&it->pos, res.pos, &max_proc, ctx.total_size, res.opts, *ctx.cfg, res.proc, ctx.sizes};
+			IDCtx id_ctx{&it->Pos(), res.pos, &max_proc, ctx.total_size, res.opts, *ctx.cfg, res.proc, ctx.sizes};
 
-			data_set.AddData(it->id, id_ctx);
+			data_set.AddData(it->Id(), id_ctx);
 			pos++;
 		}
 	}
-	std::sort(data_set.data_->begin(), data_set.data_->end(), [](const MergedData& lhs, const MergedData& rhs) {
+	boost::sort::pdqsort(data_set.data_->begin(), data_set.data_->end(), [](const MergedData& lhs, const MergedData& rhs) {
 		if (lhs.proc_ == rhs.proc_) {
 			return lhs.id_ < rhs.id_;
 		}
