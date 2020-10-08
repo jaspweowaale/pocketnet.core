@@ -96,7 +96,7 @@ void ClientConnection::connectInternal() noexcept {
 
 		call(completion, {kCmdLogin, connectEntry.opts.loginTimeout, milliseconds(0)},
 			 {Arg{p_string(&userName)}, Arg{p_string(&password)}, Arg{p_string(&dbName)}, Arg{connectEntry.opts.createDB},
-			  Arg{connectEntry.opts.hasExpectedClusterID}, Arg{connectEntry.opts.expectedClusterID}, Arg{p_string(REINDEX_VERSION)},
+			  Arg{connectEntry.opts.hasExpectedClusterID}, Arg{connectEntry.opts.expectedClusterID}, Arg{p_string("2.13.0")},
 			  Arg{p_string(&connectEntry.opts.appName)}});
 	}
 }
