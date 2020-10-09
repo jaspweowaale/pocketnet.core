@@ -13,7 +13,7 @@ const char *SQLEncoder::JoinTypeName(JoinType type) {
 			return "OR INNER JOIN";
 		case JoinType::LeftJoin:
 			return "LEFT JOIN";
-		case JoinType::Merge:
+		case JoinType::MergeRX:
 			return "MERGE";
 		default:
 			return "<unknown>";

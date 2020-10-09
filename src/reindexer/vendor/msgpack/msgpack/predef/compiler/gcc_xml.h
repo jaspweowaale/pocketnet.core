@@ -8,8 +8,8 @@ http://www.boost.org/LICENSE_1_0.txt)
 #ifndef MSGPACK_PREDEF_COMPILER_GCC_XML_H
 #define MSGPACK_PREDEF_COMPILER_GCC_XML_H
 
-#include <msgpack/msgpack/predef/version_number.h>
-#include <msgpack/msgpack/predef/make.h>
+#include <msgpack/predef/version_number.h>
+#include <msgpack/predef/make.h>
 
 /*`
 [heading `MSGPACK_COMP_GCCXML`]
@@ -44,10 +44,10 @@ http://www.boost.org/LICENSE_1_0.txt)
 
 #endif
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_COMP_GCCXML,MSGPACK_COMP_GCCXML_NAME)
 
 #ifdef MSGPACK_COMP_GCCXML_EMULATED
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_COMP_GCCXML_EMULATED,MSGPACK_COMP_GCCXML_NAME)
 #endif

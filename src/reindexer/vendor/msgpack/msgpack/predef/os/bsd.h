@@ -13,10 +13,10 @@ http://www.boost.org/LICENSE_1_0.txt)
  * detect OSX first. Hence we will force include OSX detection
  * before doing any BSD detection.
  */
-#include <msgpack/msgpack/predef/os/macos.h>
+#include <msgpack/predef/os/macos.h>
 
-#include <msgpack/msgpack/predef/version_number.h>
-#include <msgpack/msgpack/predef/make.h>
+#include <msgpack/predef/version_number.h>
+#include <msgpack/predef/make.h>
 
 /*`
 [heading `MSGPACK_OS_BSD`]
@@ -49,11 +49,11 @@ of BSD. If the above variants is detected the corresponding macro is also set.]
     ]
  */
 
-#include <msgpack/msgpack/predef/os/bsd/bsdi.h>
-#include <msgpack/msgpack/predef/os/bsd/dragonfly.h>
-#include <msgpack/msgpack/predef/os/bsd/free.h>
-#include <msgpack/msgpack/predef/os/bsd/open.h>
-#include <msgpack/msgpack/predef/os/bsd/net.h>
+#include <msgpack/predef/os/bsd/bsdi.h>
+#include <msgpack/predef/os/bsd/dragonfly.h>
+#include <msgpack/predef/os/bsd/free.h>
+#include <msgpack/predef/os/bsd/open.h>
+#include <msgpack/predef/os/bsd/net.h>
 
 #ifndef MSGPACK_OS_BSD
 #define MSGPACK_OS_BSD MSGPACK_VERSION_NUMBER_NOT_AVAILABLE
@@ -91,13 +91,13 @@ of BSD. If the above variants is detected the corresponding macro is also set.]
 
 #else
 
-#include <msgpack/msgpack/predef/os/bsd/bsdi.h>
-#include <msgpack/msgpack/predef/os/bsd/dragonfly.h>
-#include <msgpack/msgpack/predef/os/bsd/free.h>
-#include <msgpack/msgpack/predef/os/bsd/open.h>
-#include <msgpack/msgpack/predef/os/bsd/net.h>
+#include <msgpack/predef/os/bsd/bsdi.h>
+#include <msgpack/predef/os/bsd/dragonfly.h>
+#include <msgpack/predef/os/bsd/free.h>
+#include <msgpack/predef/os/bsd/open.h>
+#include <msgpack/predef/os/bsd/net.h>
 
 #endif
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_OS_BSD,MSGPACK_OS_BSD_NAME)

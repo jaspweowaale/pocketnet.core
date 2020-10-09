@@ -10,10 +10,10 @@ http://www.boost.org/LICENSE_1_0.txt)
 
 /* Other compilers that emulate this one need to be detected first. */
 
-#include <msgpack/msgpack/predef/compiler/clang.h>
+#include <msgpack/predef/compiler/clang.h>
 
-#include <msgpack/msgpack/predef/version_number.h>
-#include <msgpack/msgpack/predef/make.h>
+#include <msgpack/predef/version_number.h>
+#include <msgpack/predef/make.h>
 
 /*`
 [heading `MSGPACK_COMP_MSVC`]
@@ -96,10 +96,10 @@ compiler version number directly, i.e. the _MSC_VER number.]
 
 #endif
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_COMP_MSVC,MSGPACK_COMP_MSVC_NAME)
 
 #ifdef MSGPACK_COMP_MSVC_EMULATED
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_COMP_MSVC_EMULATED,MSGPACK_COMP_MSVC_NAME)
 #endif

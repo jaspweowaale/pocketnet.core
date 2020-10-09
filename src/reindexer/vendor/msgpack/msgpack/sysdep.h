@@ -94,7 +94,7 @@
 #endif
 
 #if !defined(MSGPACK_ENDIAN_LITTLE_BYTE) && !defined(MSGPACK_ENDIAN_BIG_BYTE)
-#include <msgpack/msgpack/predef/other/endian.h>
+#include <msgpack/predef/other/endian.h>
 #endif // !defined(MSGPACK_ENDIAN_LITTLE_BYTE) && !defined(MSGPACK_ENDIAN_BIG_BYTE)
 
 #if MSGPACK_ENDIAN_LITTLE_BYTE

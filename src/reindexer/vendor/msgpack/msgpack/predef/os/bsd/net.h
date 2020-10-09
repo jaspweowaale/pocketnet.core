@@ -8,7 +8,7 @@ http://www.boost.org/LICENSE_1_0.txt)
 #ifndef MSGPACK_PREDEF_OS_BSD_NET_H
 #define MSGPACK_PREDEF_OS_BSD_NET_H
 
-#include <msgpack/msgpack/predef/os/bsd.h>
+#include <msgpack/predef/os/bsd.h>
 
 /*`
 [heading `MSGPACK_OS_BSD_NET`]
@@ -80,5 +80,5 @@ http://www.boost.org/LICENSE_1_0.txt)
 
 #endif
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_OS_BSD_NET,MSGPACK_OS_BSD_NET_NAME)

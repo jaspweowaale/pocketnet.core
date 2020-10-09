@@ -755,7 +755,7 @@ void SQLParser::parseMerge(tokenizer &parser) {
 			throw Error(errParseSQL, "Expected ')', but found %s, %s", tok.text(), parser.where());
 		}
 	}
-	mquery.joinType = JoinType::Merge;
+	mquery.joinType = JoinType::MergeRX;
 
 	query_.mergeQueries_.emplace_back(std::move(mquery));
 }

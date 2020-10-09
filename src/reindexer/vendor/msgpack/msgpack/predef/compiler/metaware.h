@@ -8,8 +8,8 @@ http://www.boost.org/LICENSE_1_0.txt)
 #ifndef MSGPACK_PREDEF_COMPILER_METAWARE_H
 #define MSGPACK_PREDEF_COMPILER_METAWARE_H
 
-#include <msgpack/msgpack/predef/version_number.h>
-#include <msgpack/msgpack/predef/make.h>
+#include <msgpack/predef/version_number.h>
+#include <msgpack/predef/make.h>
 
 /*`
 [heading `MSGPACK_COMP_HIGHC`]
@@ -44,10 +44,10 @@ MetaWare High C/C++ compiler.
 
 #endif
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_COMP_HIGHC,MSGPACK_COMP_HIGHC_NAME)
 
 #ifdef MSGPACK_COMP_HIGHC_EMULATED
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_COMP_HIGHC_EMULATED,MSGPACK_COMP_HIGHC_NAME)
 #endif

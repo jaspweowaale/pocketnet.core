@@ -364,7 +364,7 @@ void Query::Deserialize(Serializer &ser) {
 		q1.deserialize(ser, hasJoinConditions);
 		q1.debugLevel = debugLevel;
 		q1.strictMode = strictMode;
-		if (joinType == JoinType::Merge) {
+		if (joinType == JoinType::MergeRX) {
 			mergeQueries_.emplace_back(std::move(q1));
 			nested = true;
 		} else {

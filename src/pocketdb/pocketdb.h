@@ -5,7 +5,7 @@
 #define POCKETDB_H
 //-----------------------------------------------------
 #include "core/reindexer.h"
-#include "core/namespace.h"
+//#include "core/namespace.h"
 #include "core/namespacedef.h"
 #include "core/type_consts.h"
 #include "tools/errors.h"

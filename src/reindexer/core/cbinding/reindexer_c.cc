@@ -452,7 +452,7 @@ reindexer_ret reindexer_select_query(uintptr_t rx, struct reindexer_buffer in, i
 			q1.joinType = JoinType(ser.GetVarUint());
 			q1.Deserialize(ser);
 			q1.debugLevel = q.debugLevel;
-			if (q1.joinType == JoinType::Merge) {
+			if (q1.joinType == JoinType::MergeRX) {
 				q.mergeQueries_.emplace_back(std::move(q1));
 			} else {
 				q.joinQueries_.emplace_back(std::move(q1));

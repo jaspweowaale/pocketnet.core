@@ -8,8 +8,8 @@ http://www.boost.org/LICENSE_1_0.txt)
 #ifndef MSGPACK_PREDEF_COMPILER_NVCC_H
 #define MSGPACK_PREDEF_COMPILER_NVCC_H
 
-#include <msgpack/msgpack/predef/version_number.h>
-#include <msgpack/msgpack/predef/make.h>
+#include <msgpack/predef/version_number.h>
+#include <msgpack/predef/make.h>
 
 /*`
 [heading `MSGPACK_COMP_NVCC`]
@@ -51,10 +51,10 @@ Version number available as major, minor, and patch beginning with version 7.5.
 
 #endif
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_COMP_NVCC,MSGPACK_COMP_NVCC_NAME)
 
 #ifdef MSGPACK_COMP_NVCC_EMULATED
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_COMP_NVCC_EMULATED,MSGPACK_COMP_NVCC_NAME)
 #endif

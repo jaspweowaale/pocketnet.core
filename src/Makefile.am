@@ -19,7 +19,7 @@ else
 LIBUNIVALUE = $(UNIVALUE_LIBS)
 endif
 
-REINDEXER_INCLUDES = -Ireindexer -Ireindexer/vendor -Ileveldb/include
+REINDEXER_INCLUDES = -Ireindexer -Ireindexer/vendor -Ileveldb/include -Ireindexer/vendor/msgpack
 POCKETCOIN_INCLUDES=-I$(builddir) $(BDB_CPPFLAGS) $(BOOST_CPPFLAGS) $(LEVELDB_CPPFLAGS) $(CRYPTO_CFLAGS) $(SSL_CFLAGS)
 
 POCKETCOIN_INCLUDES += -I$(srcdir)/secp256k1/include

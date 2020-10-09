@@ -8,8 +8,8 @@ http://www.boost.org/LICENSE_1_0.txt)
 #ifndef MSGPACK_PREDEF_COMPILER_BORLAND_H
 #define MSGPACK_PREDEF_COMPILER_BORLAND_H
 
-#include <msgpack/msgpack/predef/version_number.h>
-#include <msgpack/msgpack/predef/make.h>
+#include <msgpack/predef/version_number.h>
+#include <msgpack/predef/make.h>
 
 /*`
 [heading `MSGPACK_COMP_BORLAND`]
@@ -54,10 +54,10 @@ Version number available as major, minor, and patch.
 
 #endif
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_COMP_BORLAND,MSGPACK_COMP_BORLAND_NAME)
 
 #ifdef MSGPACK_COMP_BORLAND_EMULATED
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_COMP_BORLAND_EMULATED,MSGPACK_COMP_BORLAND_NAME)
 #endif

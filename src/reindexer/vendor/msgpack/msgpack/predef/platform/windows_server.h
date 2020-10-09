@@ -8,10 +8,10 @@ http://www.boost.org/LICENSE_1_0.txt)
 #ifndef MSGPACK_PREDEF_PLAT_WINDOWS_SERVER_H
 #define MSGPACK_PREDEF_PLAT_WINDOWS_SERVER_H
 
-#include <msgpack/msgpack/predef/make.h>
-#include <msgpack/msgpack/predef/os/windows.h>
-#include <msgpack/msgpack/predef/platform/windows_uwp.h>
-#include <msgpack/msgpack/predef/version_number.h>
+#include <msgpack/predef/make.h>
+#include <msgpack/predef/os/windows.h>
+#include <msgpack/predef/platform/windows_uwp.h>
+#include <msgpack/predef/version_number.h>
 
 /*`
 [heading `MSGPACK_PLAT_WINDOWS_SERVER`]
@@ -43,5 +43,5 @@ for Windows Server development.
 
 #endif
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_PLAT_WINDOWS_SERVER,MSGPACK_PLAT_WINDOWS_SERVER_NAME)

@@ -1260,19 +1260,19 @@ static void StartWS()
 
     };
 
-    ws.on_open = [](shared_ptr<WsServer::Connection> connection) {
+    ws.on_open = [](std::shared_ptr<WsServer::Connection> connection) {
         //cout << "Server: Opened connection " << connection.get() << endl;
         //if ((std::find(WSConnections.begin(), WSConnections.end(), connection) == WSConnections.end()))
         //    WSConnections.push_back(connection);
     };
 
-    ws.on_close = [](shared_ptr<WsServer::Connection> connection, int status, const string& /*reason*/) {
+    ws.on_close = [](std::shared_ptr<WsServer::Connection> connection, int status, const string& /*reason*/) {
 		if (WSConnections.find(connection->ID()) != WSConnections.end()) {
 			WSConnections.erase(connection->ID());
 		}
     };
 
-    ws.on_error = [](shared_ptr<WsServer::Connection> connection, const SimpleWeb::error_code& ec) {
+    ws.on_error = [](std::shared_ptr<WsServer::Connection> connection, const SimpleWeb::error_code& ec) {
 		if (WSConnections.find(connection->ID()) != WSConnections.end()) {
 			WSConnections.erase(connection->ID());
 		}

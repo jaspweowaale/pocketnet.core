@@ -8,12 +8,12 @@ http://www.boost.org/LICENSE_1_0.txt)
 #ifndef MSGPACK_PREDEF_ENDIAN_H
 #define MSGPACK_PREDEF_ENDIAN_H
 
-#include <msgpack/msgpack/predef/version_number.h>
-#include <msgpack/msgpack/predef/make.h>
-#include <msgpack/msgpack/predef/library/c/gnu.h>
-#include <msgpack/msgpack/predef/os/macos.h>
-#include <msgpack/msgpack/predef/os/bsd.h>
-#include <msgpack/msgpack/predef/os/android.h>
+#include <msgpack/predef/version_number.h>
+#include <msgpack/predef/make.h>
+#include <msgpack/predef/library/c/gnu.h>
+#include <msgpack/predef/os/macos.h>
+#include <msgpack/predef/os/bsd.h>
+#include <msgpack/predef/os/android.h>
 
 /*`
 [heading `MSGPACK_ENDIAN_*`]
@@ -190,14 +190,14 @@ information and acquired knowledge:
 
 #endif
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_ENDIAN_BIG_BYTE,MSGPACK_ENDIAN_BIG_BYTE_NAME)
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_ENDIAN_BIG_WORD,MSGPACK_ENDIAN_BIG_WORD_NAME)
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_ENDIAN_LITTLE_BYTE,MSGPACK_ENDIAN_LITTLE_BYTE_NAME)
 
-#include <msgpack/msgpack/predef/detail/test.h>
+#include <msgpack/predef/detail/test.h>
 MSGPACK_PREDEF_DECLARE_TEST(MSGPACK_ENDIAN_LITTLE_WORD,MSGPACK_ENDIAN_LITTLE_WORD_NAME)
