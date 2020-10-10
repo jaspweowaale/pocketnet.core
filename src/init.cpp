@@ -1655,7 +1655,7 @@ bool AppInitMain()
                         LogPrintf("Check Reindexer DB...");
 
                         std::vector<reindexer::NamespaceDef> nss;
-                        reindexer::Error err = g_pocketdb->DB()->EnumNamespaces(nss, false);
+                        reindexer::Error err = g_pocketdb->DB()->EnumNamespaces(nss, reindexer::EnumNamespacesOpts());
                         if (err.ok()) {
                             bool rChecked = true;
                             for (auto& ns : nss) {

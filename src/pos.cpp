@@ -584,7 +584,7 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
 
                             reindexer::Query _referrer_query = reindexer::Query("UsersView").Where("address", CondEq, _post_address).Not().Where("referrer", CondEq, "").Not().Where("referrer", CondEq, _score_address);
                             if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_LIMITATION) {
-                                _referrer_query = _referrer_query.Where("regdate", CondGe, (int64_t)tx->nTime - _lottery_referral_depth);
+                                _referrer_query.Where("regdate", CondGe, (int64_t)tx->nTime - _lottery_referral_depth);
                             }
                             
                             if (g_pocketdb->SelectOne( _referrer_query , _referrer_itm ).ok()) {
@@ -626,7 +626,7 @@ bool GetRatingRewards(CAmount nCredit, std::vector<CTxOut>& results, CAmount& to
 
                             reindexer::Query _referrer_query = reindexer::Query("UsersView").Where("address", CondEq, _comment_address).Not().Where("referrer", CondEq, "").Not().Where("referrer", CondEq, _score_address);
                             if (pindexPrev->nHeight >= CH_CONSENSUS_LOTTERY_REFERRAL_LIMITATION) {
-                                _referrer_query = _referrer_query.Where("regdate", CondGe, (int64_t)tx->nTime - _lottery_referral_depth);
+                                _referrer_query.Where("regdate", CondGe, (int64_t)tx->nTime - _lottery_referral_depth);
                             }
                             
                             if (g_pocketdb->SelectOne( _referrer_query , _referrer_itm ).ok()) {

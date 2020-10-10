@@ -973,7 +973,7 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
                 memItm["txid"] = hash.GetHex();
                 memItm["txid_source"] = hash.GetHex() == _txid ? "" : _txid;
                 memItm["table"] = rtx.pTable;
-                memItm["data"] = EncodeBase64(rtx.pTransaction.GetJSON().ToString());
+                memItm["data"] = EncodeBase64(string(rtx.pTransaction.GetJSON()));
                 if (!g_addrindex->WriteMemRTransaction(memItm)) {
                     return state.DoS(0, false, REJECT_INTERNAL, "error write reindexer data");
                 }

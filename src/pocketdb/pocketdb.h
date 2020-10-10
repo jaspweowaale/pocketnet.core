@@ -39,28 +39,29 @@ public:
 	bool InitDB(std::string table = "ALL");
 	bool DropTable(std::string table);
     void UpdateIndexes(std::string table = "ALL");
+    void Reindex(std::string table = "ALL");
 
-	bool CheckIndexes(UniValue& obj);
+    bool CheckIndexes(UniValue& obj);
 
-	// Statistics for DB
-	bool GetStatistic(std::string table, UniValue& obj);
+    // Statistics for DB
+    bool GetStatistic(std::string table, UniValue& obj);
 
-	bool Exists(Query query);
-	size_t SelectTotalCount(std::string table);
-	size_t SelectCount(Query query);
+    bool Exists(Query query);
+    size_t SelectTotalCount(std::string table);
+    size_t SelectCount(Query query);
 
-	Error Select(Query query, QueryResults& res);
-	Error SelectOne(Query query, Item& item);
-	Error SelectAggr(Query query, QueryResults& aggRes);
-	Error SelectAggr(Query query, std::string aggId, AggregationResult& aggRes);
+    Error Select(Query query, QueryResults& res);
+    Error SelectOne(Query query, Item& item);
+    Error SelectAggr(Query query, QueryResults& aggRes);
+    Error SelectAggr(Query query, std::string aggId, AggregationResult& aggRes);
 
-	Error Upsert(std::string table, Item& item);
-	Error UpsertWithCommit(std::string table, Item& item);
+    Error Upsert(std::string table, Item& item);
+    Error UpsertWithCommit(std::string table, Item& item);
 
-	// Delete items from query
-	Error Delete(Query query);
-	// Delete items from query and commit
-	Error DeleteWithCommit(Query query);
+    // Delete items from query
+    Error Delete(Query query);
+    // Delete items from query and commit
+    Error DeleteWithCommit(Query query);
     Error DeleteWithCommit(Query query, size_t& deleted);
 
 	Error Update(std::string table, Item& item, bool commit = true);

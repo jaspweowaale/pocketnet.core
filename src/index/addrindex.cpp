@@ -71,7 +71,7 @@ bool AddrIndex::insert_to_mempool(reindexer::Item& item, std::string table)
         memItm["txid_source"] = "";
     }
     
-    memItm["data"] = EncodeBase64(item.GetJSON().ToString());
+    memItm["data"] = EncodeBase64(string(item.GetJSON()));
 
     return WriteMemRTransaction(memItm);
 }
@@ -1180,7 +1180,7 @@ bool AddrIndex::GetTXRIData(CTransactionRef& tx, std::string& data)
     }
 
     ret_data.pushKV("t", (mempool ? "Mempool" : ri_table));
-    ret_data.pushKV("d", EncodeBase64(itm.GetJSON().ToString()));
+    ret_data.pushKV("d", EncodeBase64(string(itm.GetJSON())));
     data = ret_data.write();
     return true;
 }
@@ -1564,7 +1564,7 @@ UniValue AddrIndex::GetUniValue(const CTransactionRef& tx, Item& item, std::stri
     oitm.pushKV("table", table);
     oitm.pushKV("txid", item["txid"].As<string>());
     oitm.pushKV("address", item["address"].As<string>());
-    oitm.pushKV("size", (int)(item.GetJSON().ToString().size()));
+    oitm.pushKV("size", (int)(string(item.GetJSON()).size()));
     oitm.pushKV("time", (int64_t)tx->nTime);
 
     std::string itm_hash;

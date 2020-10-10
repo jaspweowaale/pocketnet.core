@@ -110,9 +110,9 @@ std::map<std::string, UniValue> getUsersProfiles(std::vector<std::string> addres
     // Get count of posts by addresses
     reindexer::AggregationResult aggRes;
     std::map<std::string, int> _posts_cnt;
-    if (g_pocketdb->SelectAggr(reindexer::Query("Posts").Where("address", CondSet, addresses).Aggregate("address", AggFacet), "address", aggRes).ok()) {
+    if (g_pocketdb->SelectAggr(reindexer::Query("Posts").Where("address", CondSet, addresses).Aggregate(AggFacet, {"address"}), "address", aggRes).ok()) {
         for (const auto& f : aggRes.facets) {
-            _posts_cnt.insert_or_assign(f.value, f.count);
+            _posts_cnt.insert_or_assign(f.values[0], f.count);
         }
     }
 
@@ -291,18 +291,18 @@ UniValue getPostData(reindexer::Item& itm, std::string address)
         UniValue oCmnt(UniValue::VOBJ);
 
         reindexer::Item cmntItm = cmntRes[0].GetItem();
-        reindexer::Item ocmntItm = cmntRes[0].GetJoined()[0][0].GetItem();
+        //reindexer::Item ocmntItm = cmntRes[0].GetJoined()[0][0].GetItem();
 
         int myScore = 0;
-        if (cmntRes[0].GetJoined().size() > 1 && cmntRes[0].GetJoined()[1].Count() > 0) {
-            reindexer::Item ocmntScoreItm = cmntRes[0].GetJoined()[1][0].GetItem();
-            myScore = ocmntScoreItm["value"].As<int>();
-        }
+        //if (cmntRes[0].GetJoined().size() > 1 && cmntRes[0].GetJoined()[1].Count() > 0) {
+        //    reindexer::Item ocmntScoreItm = cmntRes[0].GetJoined()[1][0].GetItem();
+        //    myScore = ocmntScoreItm["value"].As<int>();
+        //}
 
         oCmnt.pushKV("id", cmntItm["otxid"].As<string>());
         oCmnt.pushKV("postid", cmntItm["postid"].As<string>());
         oCmnt.pushKV("address", cmntItm["address"].As<string>());
-        oCmnt.pushKV("time", ocmntItm["time"].As<string>());
+        //oCmnt.pushKV("time", ocmntItm["time"].As<string>());
         oCmnt.pushKV("timeUpd", cmntItm["time"].As<string>());
         oCmnt.pushKV("block", cmntItm["block"].As<string>());
         oCmnt.pushKV("msg", cmntItm["msg"].As<string>());
@@ -1550,7 +1550,7 @@ UniValue search(const JSONRPCRequest& request)
     std::string type = "";
     if (request.params.size() > 1) {
         RPCTypeCheckArgument(request.params[1], UniValue::VSTR);
-        type = lower(request.params[1].get_str());
+        type = reindexer::toLower(request.params[1].get_str());
     }
 
     if (type != "all" && type != "posts" && type != "tags" && type != "users") {
@@ -1918,7 +1918,7 @@ UniValue gettags(const JSONRPCRequest& request)
         UniValue t(UniValue::VARR);
         reindexer::VariantArray va = postItm["tags"];
         for (unsigned int idx = 0; idx < va.size(); idx++) {
-            std::string sTag = lower(va[idx].As<string>());
+            std::string sTag = reindexer::toLower(va[idx].As<string>());
             if (std::all_of(sTag.begin(), sTag.end(), [](unsigned char ch) { return ::isdigit(ch) || ::isalpha(ch); })) {
                 if (mapTags.count(sTag) == 0)
                     mapTags[sTag] = 1;
@@ -2008,19 +2008,19 @@ UniValue getcomments(const JSONRPCRequest& request)
     UniValue aResult(UniValue::VARR);
     for (auto& it : commRes) {
         reindexer::Item cmntItm = it.GetItem();
-        reindexer::Item ocmntItm = it.GetJoined()[0][0].GetItem();
+        //reindexer::Item ocmntItm = it.GetJoined()[0][0].GetItem();
 
         int myScore = 0;
-        if (it.GetJoined().size() > 1 && it.GetJoined()[1].Count() > 0) {
-            reindexer::Item ocmntScoreItm = it.GetJoined()[1][0].GetItem();
-            myScore = ocmntScoreItm["value"].As<int>();
-        }
+        //if (it.GetJoined().size() > 1 && it.GetJoined()[1].Count() > 0) {
+        //    reindexer::Item ocmntScoreItm = it.GetJoined()[1][0].GetItem();
+        //    myScore = ocmntScoreItm["value"].As<int>();
+        //}
 
         UniValue oCmnt(UniValue::VOBJ);
         oCmnt.pushKV("id", cmntItm["otxid"].As<string>());
         oCmnt.pushKV("postid", cmntItm["postid"].As<string>());
         oCmnt.pushKV("address", cmntItm["address"].As<string>());
-        oCmnt.pushKV("time", ocmntItm["time"].As<string>());
+        //oCmnt.pushKV("time", ocmntItm["time"].As<string>());
         oCmnt.pushKV("timeUpd", cmntItm["time"].As<string>());
         oCmnt.pushKV("block", cmntItm["block"].As<string>());
         oCmnt.pushKV("msg", cmntItm["msg"].As<string>());
@@ -2071,19 +2071,19 @@ UniValue getlastcomments(const JSONRPCRequest& request)
     UniValue aResult(UniValue::VARR);
     for (auto& it : commRes) {
         reindexer::Item cmntItm = it.GetItem();
-        reindexer::Item ocmntItm = it.GetJoined()[0][0].GetItem();
+        //reindexer::Item ocmntItm = it.GetJoined()[0][0].GetItem();
 
         int myScore = 0;
-        if (it.GetJoined().size() > 1 && it.GetJoined()[1].Count() > 0) {
-            reindexer::Item ocmntScoreItm = it.GetJoined()[1][0].GetItem();
-            myScore = ocmntScoreItm["value"].As<int>();
-        }
+        //if (it.GetJoined().size() > 1 && it.GetJoined()[1].Count() > 0) {
+        //    reindexer::Item ocmntScoreItm = it.GetJoined()[1][0].GetItem();
+        //    myScore = ocmntScoreItm["value"].As<int>();
+        //}
 
         UniValue oCmnt(UniValue::VOBJ);
         oCmnt.pushKV("id", cmntItm["otxid"].As<string>());
         oCmnt.pushKV("postid", cmntItm["postid"].As<string>());
         oCmnt.pushKV("address", cmntItm["address"].As<string>());
-        oCmnt.pushKV("time", ocmntItm["time"].As<string>());
+        //oCmnt.pushKV("time", ocmntItm["time"].As<string>());
         oCmnt.pushKV("timeUpd", cmntItm["time"].As<string>());
         oCmnt.pushKV("block", cmntItm["block"].As<string>());
         oCmnt.pushKV("msg", cmntItm["msg"].As<string>());
@@ -2150,15 +2150,15 @@ UniValue getaddressscores(const JSONRPCRequest& request)
     UniValue result(UniValue::VARR);
     for (auto it : queryRes) {
         reindexer::Item itm(it.GetItem());
-        reindexer::Item itmj(it.GetJoined()[0][0].GetItem());
+        //reindexer::Item itmj(it.GetJoined()[0][0].GetItem());
 
         UniValue postscore(UniValue::VOBJ);
-        postscore.pushKV("posttxid", itm["posttxid"].As<string>());
-        postscore.pushKV("address", itm["address"].As<string>());
-        postscore.pushKV("name", itmj["name"].As<string>());
-        postscore.pushKV("avatar", itmj["avatar"].As<string>());
-        postscore.pushKV("reputation", itmj["reputation"].As<string>());
-        postscore.pushKV("value", itm["value"].As<string>());
+        //postscore.pushKV("posttxid", itm["posttxid"].As<string>());
+        //postscore.pushKV("address", itm["address"].As<string>());
+        //postscore.pushKV("name", itmj["name"].As<string>());
+        //postscore.pushKV("avatar", itmj["avatar"].As<string>());
+        //postscore.pushKV("reputation", itmj["reputation"].As<string>());
+        //postscore.pushKV("value", itm["value"].As<string>());
         result.push_back(postscore);
     }
     return result;
@@ -2210,16 +2210,16 @@ UniValue getpostscores(const JSONRPCRequest& request)
     std::vector<std::string> subscribeadrs;
     for (auto it : queryRes1) {
         reindexer::Item itm(it.GetItem());
-        reindexer::Item itmj(it.GetJoined()[0][0].GetItem());
-        reindexer::Item itmj2(it.GetJoined()[1][0].GetItem());
+        //reindexer::Item itmj(it.GetJoined()[0][0].GetItem());
+        //reindexer::Item itmj2(it.GetJoined()[1][0].GetItem());
         UniValue postscore(UniValue::VOBJ);
-        postscore.pushKV("posttxid", itm["posttxid"].As<string>());
-        postscore.pushKV("address", itm["address"].As<string>());
-        postscore.pushKV("name", itmj2["name"].As<string>());
-        postscore.pushKV("avatar", itmj2["avatar"].As<string>());
-        postscore.pushKV("reputation", itmj2["reputation"].As<string>());
-        postscore.pushKV("value", itm["value"].As<string>());
-        postscore.pushKV("isprivate", itmj["private"].As<string>());
+        //postscore.pushKV("posttxid", itm["posttxid"].As<string>());
+        //postscore.pushKV("address", itm["address"].As<string>());
+        //postscore.pushKV("name", itmj2["name"].As<string>());
+        //postscore.pushKV("avatar", itmj2["avatar"].As<string>());
+        //postscore.pushKV("reputation", itmj2["reputation"].As<string>());
+        //postscore.pushKV("value", itm["value"].As<string>());
+        //postscore.pushKV("isprivate", itmj["private"].As<string>());
         result.push_back(postscore);
 
         subscribeadrs.push_back(itm["address"].As<string>());
@@ -2234,14 +2234,14 @@ UniValue getpostscores(const JSONRPCRequest& request)
 
     for (auto it : queryRes2) {
         reindexer::Item itm(it.GetItem());
-        reindexer::Item itmj(it.GetJoined()[0][0].GetItem());
+        //reindexer::Item itmj(it.GetJoined()[0][0].GetItem());
         UniValue postscore(UniValue::VOBJ);
-        postscore.pushKV("posttxid", itm["posttxid"].As<string>());
-        postscore.pushKV("address", itm["address"].As<string>());
-        postscore.pushKV("name", itmj["name"].As<string>());
-        postscore.pushKV("avatar", itmj["avatar"].As<string>());
-        postscore.pushKV("reputation", itmj["reputation"].As<string>());
-        postscore.pushKV("value", itm["value"].As<string>());
+        //postscore.pushKV("posttxid", itm["posttxid"].As<string>());
+        //postscore.pushKV("address", itm["address"].As<string>());
+        //postscore.pushKV("name", itmj["name"].As<string>());
+        //postscore.pushKV("avatar", itmj["avatar"].As<string>());
+        //postscore.pushKV("reputation", itmj["reputation"].As<string>());
+        //postscore.pushKV("value", itm["value"].As<string>());
         result.push_back(postscore);
     }
 
@@ -2377,7 +2377,7 @@ UniValue getpagescores(const JSONRPCRequest& request)
 
         UniValue postscore(UniValue::VOBJ);
         postscore.pushKV("posttxid", itm["txid"].As<string>());
-        if (it.GetJoined().size() > 0) postscore.pushKV("value", it.GetJoined()[0][0].GetItem()["value"].As<string>());
+        //if (it.GetJoined().size() > 0) postscore.pushKV("value", it.GetJoined()[0][0].GetItem()["value"].As<string>());
         postscore.pushKV("postlikers", postlikers);
         result.push_back(postscore);
     }
@@ -2399,7 +2399,7 @@ UniValue getpagescores(const JSONRPCRequest& request)
         cmntscore.pushKV("scoreUp", cmntItm["scoreUp"].As<string>());
         cmntscore.pushKV("scoreDown", cmntItm["scoreDown"].As<string>());
         cmntscore.pushKV("reputation", cmntItm["reputation"].As<string>());
-        if (cit.GetJoined().size() > 0) cmntscore.pushKV("myscore", cit.GetJoined()[0][0].GetItem()["value"].As<string>());
+        //if (cit.GetJoined().size() > 0) cmntscore.pushKV("myscore", cit.GetJoined()[0][0].GetItem()["value"].As<string>());
         result.push_back(cmntscore);
     }
 

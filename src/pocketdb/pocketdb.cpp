@@ -164,14 +164,14 @@ bool PocketDB::InitDB(std::string table)
 {
     // Service
     if (table == "Service" || table == "ALL") {
-        db->OpenNamespace("Service", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("Service", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Service", {"version", "tree", "int", IndexOpts().PK()});
         db->Commit("Service");
     }
 
 	// RI Mempool
     if (table == "Mempool" || table == "ALL") {
-        db->OpenNamespace("Mempool", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("Mempool", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Mempool", {"txid", "hash", "string", IndexOpts().PK()});
         db->AddIndex("Mempool", {"txid_source", "hash", "string", IndexOpts()});
         db->AddIndex("Mempool", {"table", "-", "string", IndexOpts()});
@@ -181,7 +181,7 @@ bool PocketDB::InitDB(std::string table)
 
     // Users
     if (table == "UsersView" || table == "ALL") {
-        db->OpenNamespace("UsersView", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("UsersView", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("UsersView", {"txid", "hash", "string", IndexOpts()});
         db->AddIndex("UsersView", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("UsersView", {"time", "tree", "int64", IndexOpts()});
@@ -205,7 +205,7 @@ bool PocketDB::InitDB(std::string table)
 
     // RI UsersHistory
     if (table == "Users" || table == "ALL") {
-        db->OpenNamespace("Users", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("Users", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Users", {"txid", "hash", "string", IndexOpts().PK()});
         db->AddIndex("Users", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("Users", {"time", "tree", "int64", IndexOpts()});
@@ -227,7 +227,7 @@ bool PocketDB::InitDB(std::string table)
 
     // UserRatings
     if (table == "UserRatings" || table == "ALL") {
-        db->OpenNamespace("UserRatings", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("UserRatings", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("UserRatings", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("UserRatings", {"address", "hash", "string", IndexOpts()});
         db->AddIndex("UserRatings", {"reputation", "-", "int", IndexOpts()});
@@ -237,7 +237,7 @@ bool PocketDB::InitDB(std::string table)
 
     // Posts
     if (table == "Posts" || table == "ALL") {
-        db->OpenNamespace("Posts", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("Posts", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Posts", {"txid", "hash", "string", IndexOpts().PK()});
         db->AddIndex("Posts", {"txidEdit", "hash", "string", IndexOpts()});
         db->AddIndex("Posts", {"txidRepost", "hash", "string", IndexOpts()});
@@ -263,7 +263,7 @@ bool PocketDB::InitDB(std::string table)
 
     // Posts Hitstory
     if (table == "PostsHistory" || table == "ALL") {
-        db->OpenNamespace("PostsHistory", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("PostsHistory", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("PostsHistory", {"txid", "hash", "string", IndexOpts()});
         db->AddIndex("PostsHistory", {"txidEdit", "hash", "string", IndexOpts()});
         db->AddIndex("PostsHistory", {"txidRepost", "hash", "string", IndexOpts()});
@@ -284,7 +284,7 @@ bool PocketDB::InitDB(std::string table)
 
     // PostRatings
     if (table == "PostRatings" || table == "ALL") {
-        db->OpenNamespace("PostRatings", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("PostRatings", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("PostRatings", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("PostRatings", {"posttxid", "hash", "string", IndexOpts()});
         db->AddIndex("PostRatings", {"scoreSum", "-", "int", IndexOpts()});
@@ -296,7 +296,7 @@ bool PocketDB::InitDB(std::string table)
 
     // Scores
     if (table == "Scores" || table == "ALL") {
-        db->OpenNamespace("Scores", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("Scores", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Scores", {"txid", "hash", "string", IndexOpts().PK()});
         db->AddIndex("Scores", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("Scores", {"time", "tree", "int64", IndexOpts()});
@@ -308,7 +308,7 @@ bool PocketDB::InitDB(std::string table)
 
     // Subscribes
     if (table == "SubscribesView" || table == "ALL") {
-        db->OpenNamespace("SubscribesView", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("SubscribesView", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("SubscribesView", {"txid", "hash", "string", IndexOpts()});
         db->AddIndex("SubscribesView", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("SubscribesView", {"time", "tree", "int64", IndexOpts()});
@@ -321,7 +321,7 @@ bool PocketDB::InitDB(std::string table)
 
     // RI SubscribesHistory
     if (table == "Subscribes" || table == "ALL") {
-        db->OpenNamespace("Subscribes", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("Subscribes", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Subscribes", {"txid", "hash", "string", IndexOpts().PK()});
         db->AddIndex("Subscribes", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("Subscribes", {"time", "tree", "int64", IndexOpts()});
@@ -334,7 +334,7 @@ bool PocketDB::InitDB(std::string table)
 
 	// Blocking
     if (table == "BlockingView" || table == "ALL") {
-        db->OpenNamespace("BlockingView", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("BlockingView", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("BlockingView", {"txid", "hash", "string", IndexOpts().PK()});
         db->AddIndex("BlockingView", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("BlockingView", {"time", "tree", "int64", IndexOpts()});
@@ -346,7 +346,7 @@ bool PocketDB::InitDB(std::string table)
 
 	// BlockingHistory
     if (table == "Blocking" || table == "ALL") {
-        db->OpenNamespace("Blocking", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("Blocking", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Blocking", {"txid", "hash", "string", IndexOpts().PK()});
         db->AddIndex("Blocking", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("Blocking", {"time", "tree", "int64", IndexOpts()});
@@ -358,7 +358,7 @@ bool PocketDB::InitDB(std::string table)
 
     // Complains
     if (table == "Complains" || table == "ALL") {
-        db->OpenNamespace("Complains", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("Complains", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Complains", {"txid", "hash", "string", IndexOpts().PK()});
         db->AddIndex("Complains", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("Complains", {"time", "tree", "int64", IndexOpts()});
@@ -370,7 +370,7 @@ bool PocketDB::InitDB(std::string table)
 
     // UTXO
     if (table == "UTXO" || table == "ALL") {
-        db->OpenNamespace("UTXO", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("UTXO", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("UTXO", {"txid", "-", "string", IndexOpts()});
         db->AddIndex("UTXO", {"txout", "-", "int", IndexOpts()});
         db->AddIndex("UTXO", {"time", "-", "int64", IndexOpts()});
@@ -384,7 +384,7 @@ bool PocketDB::InitDB(std::string table)
 
     // Addresses
     if (table == "Addresses" || table == "ALL") {
-        db->OpenNamespace("Addresses", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("Addresses", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Addresses", {"txid", "hash", "string", IndexOpts()});
         db->AddIndex("Addresses", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("Addresses", {"address", "hash", "string", IndexOpts().PK()});
@@ -394,7 +394,7 @@ bool PocketDB::InitDB(std::string table)
 
     // Comment
     if (table == "Comment" || table == "ALL") {
-        db->OpenNamespace("Comment", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("Comment", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("Comment", {"txid", "hash", "string", IndexOpts().PK()});
         db->AddIndex("Comment", {"otxid", "hash", "string", IndexOpts()});
         db->AddIndex("Comment", {"last", "-", "bool", IndexOpts()});
@@ -413,7 +413,7 @@ bool PocketDB::InitDB(std::string table)
 
     // CommentRatings
     if (table == "CommentRatings" || table == "ALL") {
-        db->OpenNamespace("CommentRatings", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("CommentRatings", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("CommentRatings", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("CommentRatings", {"commentid", "hash", "string", IndexOpts()});
         db->AddIndex("CommentRatings", {"scoreUp", "-", "int", IndexOpts()});
@@ -425,7 +425,7 @@ bool PocketDB::InitDB(std::string table)
 
     // CommentScores
     if (table == "CommentScores" || table == "ALL") {
-        db->OpenNamespace("CommentScores", StorageOpts().Enabled().CreateIfMissing(), CacheMode::CacheModeOff);
+        db->OpenNamespace("CommentScores", StorageOpts().Enabled().CreateIfMissing());
         db->AddIndex("CommentScores", {"txid", "hash", "string", IndexOpts().PK()});
         db->AddIndex("CommentScores", {"block", "tree", "int", IndexOpts()});
         db->AddIndex("CommentScores", {"time", "tree", "int64", IndexOpts()});
@@ -456,7 +456,7 @@ bool PocketDB::CheckIndexes(UniValue& obj)
     Error err;
     bool ret = true;
     std::vector<NamespaceDef> nss;
-    db->EnumNamespaces(nss, false);
+    db->EnumNamespaces(nss, reindexer::EnumNamespacesOpts());
 
     for (NamespaceDef& ns : nss) {
         if (std::find_if(ns.indexes.begin(), ns.indexes.end(), [&](const IndexDef& idx) { return idx.name_ == "txid"; }) == ns.indexes.end()) {
@@ -542,7 +542,7 @@ bool PocketDB::GetStatistic(std::string table, UniValue& obj)
 
             UniValue t_arr(UniValue::VARR);
             for (auto& it : _res) {
-                t_arr.push_back(it.GetItem().GetJSON().ToString());
+                t_arr.push_back(string(it.GetItem().GetJSON()));
             }
             obj.pushKV("items", t_arr);
         }
@@ -552,7 +552,7 @@ bool PocketDB::GetStatistic(std::string table, UniValue& obj)
     //--------------------------
     bool ret = true;
     std::vector<NamespaceDef> nss;
-    db->EnumNamespaces(nss, false);
+    db->EnumNamespaces(nss, reindexer::EnumNamespacesOpts());
 
     struct NamespaceDefSortComp
     {
