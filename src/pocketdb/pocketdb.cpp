@@ -75,7 +75,7 @@ bool PocketDB::UpdateDB() {
 
 bool PocketDB::ConnectDB() {
     db = new Reindexer();
-    Error err = db->Connect("builtin://" + (GetDataDir() / "pocketdb").string());
+    Error err = db->Connect("builtin://" + (GetDataDir() / "pocketdb").string(), ConnectOpts());
     if (!err.ok()) {
         LogPrintf("Cannot open Reindexer DB (%s) - %s\n", (GetDataDir() / "pocketdb").string(), err.what());
         return false;

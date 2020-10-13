@@ -5,7 +5,7 @@
 namespace reindexer {
 namespace datastorage {
 
-IDataStorage* StorageFactory::create(StorageType type) {
+IDataStorage* StorageFactory::create(StorageType type = StorageType::LevelDB) {
 	switch (type) {
 		case StorageType::LevelDB:
 #ifdef REINDEX_WITH_LEVELDB
