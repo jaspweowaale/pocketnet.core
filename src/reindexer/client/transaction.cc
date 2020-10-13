@@ -3,7 +3,7 @@
 #include "client/rpcclient.h"
 #include "core/keyvalue/p_string.h"
 #include "net/cproto/clientconnection.h"
-#include "net/cproto/cproto.cc"
+#include "net/cproto/cproto.h"
 
 namespace reindexer {
 namespace client {
