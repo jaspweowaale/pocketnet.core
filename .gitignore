@@ -80,6 +80,7 @@ src/qt/pocketcoin-qt.includes
 *.dmg
 
 *.json.h
+!src/reindexer/core/query/dsl/query.json.h
 *.raw.h
 
 #libtool object files
