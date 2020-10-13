@@ -994,6 +994,14 @@ obj/build.h: FORCE
 	  "$(abs_top_srcdir)"
 libpocketcoin_util_a-clientversion.$(OBJEXT): obj/build.h
 
+# reindexer library
+libreindexer_a_CPPFLAGS = $(REINDEXER_INCLUDES)
+libreindexer_a_CXXFLAGS = $(REINDEXER_INCLUDES)
+libreindexer_a_SOURCES = \
+    $(REINDEXER_H) \
+    $(REINDEXER_CC)
+#
+
 # server: shared between pocketcoind and pocketcoin-qt
 libpocketcoin_server_a_CPPFLAGS = $(AM_CPPFLAGS) $(POCKETCOIN_INCLUDES) $(MINIUPNPC_CPPFLAGS) $(EVENT_CFLAGS) $(EVENT_PTHREADS_CFLAGS)
 libpocketcoin_server_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
@@ -1050,6 +1058,8 @@ libpocketcoin_server_a_SOURCES = \
     antibot/antibot.cpp \
     index/addrindex.cpp \
     websocket/ws.cpp \
+    $(REINDEXER_H) \
+    $(REINDEXER_CC) \
     $(POCKETCOIN_CORE_H)
 
 if !ENABLE_WALLET
@@ -1072,20 +1082,21 @@ endif
 libpocketcoin_wallet_a_CPPFLAGS = $(AM_CPPFLAGS) $(POCKETCOIN_INCLUDES)
 libpocketcoin_wallet_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libpocketcoin_wallet_a_SOURCES = \
-  interfaces/wallet.cpp \
-  wallet/coincontrol.cpp \
-  wallet/crypter.cpp \
-  wallet/db.cpp \
-  wallet/feebumper.cpp \
-  wallet/fees.cpp \
-  wallet/init.cpp \
-  wallet/rpcdump.cpp \
-  wallet/rpcwallet.cpp \
-  wallet/wallet.cpp \
-  wallet/walletdb.cpp \
-  wallet/walletutil.cpp \
-  wallet/coinselection.cpp \
-  $(POCKETCOIN_CORE_H)
+    interfaces/wallet.cpp \
+    wallet/coincontrol.cpp \
+    wallet/crypter.cpp \
+    wallet/db.cpp \
+    wallet/feebumper.cpp \
+    wallet/fees.cpp \
+    wallet/init.cpp \
+    wallet/rpcdump.cpp \
+    wallet/rpcwallet.cpp \
+    wallet/wallet.cpp \
+    wallet/walletdb.cpp \
+    wallet/walletutil.cpp \
+    wallet/coinselection.cpp \
+    $(REINDEXER_H) \
+    $(POCKETCOIN_CORE_H)
 
 # crypto primitives library
 crypto_libpocketcoin_crypto_base_a_CPPFLAGS = $(AM_CPPFLAGS)
@@ -1199,24 +1210,25 @@ libpocketcoin_common_a_SOURCES = \
 libpocketcoin_util_a_CPPFLAGS = $(AM_CPPFLAGS) $(POCKETCOIN_INCLUDES)
 libpocketcoin_util_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libpocketcoin_util_a_SOURCES = \
-  support/lockedpool.cpp \
-  chainparamsbase.cpp \
-  clientversion.cpp \
-  compat/glibc_sanity.cpp \
-  compat/glibcxx_sanity.cpp \
-  compat/strnlen.cpp \
-  fs.cpp \
-  logging.cpp \
-  random.cpp \
-  rpc/protocol.cpp \
-  support/cleanse.cpp \
-  sync.cpp \
-  threadinterrupt.cpp \
-  util.cpp \
-  utilmoneystr.cpp \
-  utilstrencodings.cpp \
-  utiltime.cpp \
-  $(POCKETCOIN_CORE_H)
+    support/lockedpool.cpp \
+    chainparamsbase.cpp \
+    clientversion.cpp \
+    compat/glibc_sanity.cpp \
+    compat/glibcxx_sanity.cpp \
+    compat/strnlen.cpp \
+    fs.cpp \
+    logging.cpp \
+    random.cpp \
+    rpc/protocol.cpp \
+    support/cleanse.cpp \
+    sync.cpp \
+    threadinterrupt.cpp \
+    util.cpp \
+    utilmoneystr.cpp \
+    utilstrencodings.cpp \
+    utiltime.cpp \
+    $(REINDEXER_H) \
+    $(POCKETCOIN_CORE_H)
 
 if GLIBC_BACK_COMPAT
 libpocketcoin_util_a_SOURCES += compat/glibc_compat.cpp
@@ -1227,22 +1239,15 @@ endif
 libpocketcoin_cli_a_CPPFLAGS = $(AM_CPPFLAGS) $(POCKETCOIN_INCLUDES)
 libpocketcoin_cli_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 libpocketcoin_cli_a_SOURCES = \
-  rpc/client.cpp \
-  $(POCKETCOIN_CORE_H)
+    rpc/client.cpp \
+    $(REINDEXER_H) \
+    $(POCKETCOIN_CORE_H)
 
 nodist_libpocketcoin_util_a_SOURCES = $(srcdir)/obj/build.h
 #
 
-# reindexer library
-libreindexer_a_CPPFLAGS = $(REINDEXER_INCLUDES)
-libreindexer_a_CXXFLAGS = $(REINDEXER_INCLUDES)
-libreindexer_a_SOURCES = \
-    $(REINDEXER_CC) \
-    $(REINDEXER_H)
-#
-
 # pocketcoind binary #
-pocketcoind_SOURCES = pocketcoind.cpp $(REINDEXER_H) $(REINDEXER_CC)
+pocketcoind_SOURCES = pocketcoind.cpp $(REINDEXER_H)
 pocketcoind_CPPFLAGS = $(AM_CPPFLAGS) $(POCKETCOIN_INCLUDES)
 pocketcoind_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 pocketcoind_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)

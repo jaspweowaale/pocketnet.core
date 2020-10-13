@@ -14,7 +14,7 @@ namespace reindexer {
 
 void terminate_handler() {
 	std::ostringstream sout;
-	debug::getBackTraceString(sout, nullptr, -1);
+	// reindexer::debug::getBackTraceString(sout, nullptr, -1);
 	std::string traceString(sout.str());
 	FILE* fp = fopen(fs::JoinPath(fs::GetTempDir(), "crash_reindexer.log").c_str(), "wb");
 	if (fp) {
