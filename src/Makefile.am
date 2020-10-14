@@ -995,8 +995,7 @@ obj/build.h: FORCE
 libpocketcoin_util_a-clientversion.$(OBJEXT): obj/build.h
 
 # reindexer library
-libreindexer_a_CPPFLAGS = $(REINDEXER_INCLUDES)
-libreindexer_a_CXXFLAGS += -DREINDEX_WITH_LEVELDB
+libreindexer_a_CPPFLAGS = $(REINDEXER_INCLUDES) -DREINDEX_WITH_LEVELDB
 libreindexer_a_CXXFLAGS = $(REINDEXER_INCLUDES)
 libreindexer_a_SOURCES = \
     $(REINDEXER_H) \

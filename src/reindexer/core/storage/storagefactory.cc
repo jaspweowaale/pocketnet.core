@@ -2,6 +2,10 @@
 #include "leveldbstorage.h"
 #include "rocksdbstorage.h"
 
+#ifndef REINDEX_WITH_LEVELDB
+#define REINDEX_WITH_LEVELDB
+#endif
+
 namespace reindexer {
 namespace datastorage {
 

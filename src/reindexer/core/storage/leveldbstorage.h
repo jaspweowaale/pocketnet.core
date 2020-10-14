@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef REINDEX_WITH_LEVELDB
+//#ifdef REINDEX_WITH_LEVELDB
 
 #include <leveldb/write_batch.h>
 #include "basestorage.h"
@@ -102,4 +102,4 @@ private:
 }  // namespace datastorage
 }  // namespace reindexer
 
-#endif  // REINDEX_WITH_LEVELDB
+//#endif  // REINDEX_WITH_LEVELDB
