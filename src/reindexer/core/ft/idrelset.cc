@@ -9,10 +9,10 @@ namespace reindexer {
 
 size_t IdRelType::pack(uint8_t* buf) const {
 	auto p = buf;
-	p += uint32_pack(id_, p);
-	p += uint32_pack(pos_.size(), p);
+	p += uint32_pack(id, p);
+	p += uint32_pack(pos.size(), p);
 	uint32_t last = 0;
-	for (auto c : pos_) {
+	for (auto c : pos) {
 		p += uint32_pack(c.fpos - last, p);
 		last = c.fpos;
 	}
@@ -24,7 +24,7 @@ size_t IdRelType::unpack(const uint8_t* buf, unsigned len) {
 	assert(len != 0);
 	auto l = scan_varint(len, p);
 	assert(l != 0);
-	id_ = parse_uint32(l, p);
+	id = parse_uint32(l, p);
 	p += l, len -= l;
 
 	l = scan_varint(len, p);
@@ -32,23 +32,21 @@ size_t IdRelType::unpack(const uint8_t* buf, unsigned len) {
 	int sz = parse_uint32(l, p);
 	p += l, len -= l;
 
-	pos_.resize(sz);
-	usedFieldsMask_ = 0;
+	pos.resize(sz);
 	uint32_t last = 0;
 	for (int i = 0; i < sz; i++) {
 		l = scan_varint(len, p);
 		assert(l != 0);
-		pos_[i].fpos = parse_uint32(l, p) + last;
-		last = pos_[i].fpos;
-		addField(pos_[i].field());
+		pos[i].fpos = parse_uint32(l, p) + last;
+		last = pos[i].fpos;
 		p += l, len -= l;
 	}
 
 	return p - buf;
 }
 
-int IdRelType::Distance(const IdRelType& other, int max) const {
-	for (auto i = pos_.begin(), j = other.pos_.begin(); i != pos_.end() && j != other.pos_.end();) {
+int IdRelType::distance(const IdRelType& other, int max) const {
+	for (auto i = pos.begin(), j = other.pos.begin(); i != pos.end() && j != other.pos.end();) {
 		bool sign = i->fpos > j->fpos;
 		int cur = sign ? i->fpos - j->fpos : j->fpos - i->fpos;
 		if (cur < max && cur < (1 << PosType::posBits)) {
@@ -59,12 +57,12 @@ int IdRelType::Distance(const IdRelType& other, int max) const {
 	}
 	return max;
 }
-int IdRelType::WordsInField(int field) {
+int IdRelType::wordsInField(int field) {
 	unsigned i = 0;
 	int wcount = 0;
 	// TODO: optiminize here, binary search or precalculate
-	while (i < pos_.size() && pos_[i].field() < field) i++;
-	while (i < pos_.size() && pos_[i].field() == field) i++, wcount++;
+	while (i < pos.size() && pos[i].field() < field) i++;
+	while (i < pos.size() && pos[i].field() == field) i++, wcount++;
 
 	return wcount;
 }
@@ -73,16 +71,24 @@ int IdRelSet::Add(VDocIdType id, int pos, int field) {
 	if (id > max_id_) max_id_ = id;
 	if (id < min_id_) min_id_ = id;
 
-	if (!size() || back().Id() != id) {
-		emplace_back(id);
+	if (!size() || back().id != id) {
+		IdRelType idrel;
+		idrel.id = id;
+		push_back(std::move(idrel));
 	}
-	back().Add(pos, field);
-	return back().Size();
+	back().pos.push_back({pos, field});
+	return back().pos.size();
 }
 
-void IdRelType::SimpleCommit() {
-	boost::sort::pdqsort(pos_.begin(), pos_.end(),
-						 [](const IdRelType::PosType& lhs, const IdRelType::PosType& rhs) { return lhs.pos() < rhs.pos(); });
+void IdRelSet::Commit() {
+	boost::sort::pdqsort(begin(), end(), [](const IdRelType& lhs, const IdRelType& rhs) { return lhs.rank() > rhs.rank(); });
+}
+
+void IdRelSet::SimpleCommit() {
+	for (auto& val : *this) {
+		boost::sort::pdqsort(val.pos.begin(), val.pos.end(),
+							 [](const IdRelType::PosType& lhs, const IdRelType::PosType& rhs) { return lhs.pos() < rhs.pos(); });
+	}
 }
 
 }  // namespace reindexer

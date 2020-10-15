@@ -3,13 +3,12 @@
 
 namespace reindexer {
 
-Reindexer::Reindexer(IClientsStats* clientsStats) : impl_(new ReindexerImpl(clientsStats)), owner_(true) {}
+Reindexer::Reindexer() : impl_(new ReindexerImpl), owner_(true) {}
 Reindexer::~Reindexer() {
 	if (owner_) {
 		delete impl_;
 	}
 }
-
 Reindexer::Reindexer(const Reindexer& rdx) noexcept : impl_(rdx.impl_), owner_(false), ctx_(rdx.ctx_) {}
 Reindexer::Reindexer(Reindexer&& rdx) noexcept : impl_(rdx.impl_), owner_(rdx.owner_), ctx_(std::move(rdx.ctx_)) { rdx.owner_ = false; }
 
@@ -45,16 +44,11 @@ Error Reindexer::Select(const Query& q, QueryResults& result) { return impl_->Se
 Error Reindexer::Update(const Query& query, QueryResults& result) { return impl_->Update(query, result, ctx_); }
 Error Reindexer::Commit(string_view nsName) { return impl_->Commit(nsName); }
 Error Reindexer::AddIndex(string_view nsName, const IndexDef& idx) { return impl_->AddIndex(nsName, idx, ctx_); }
-Error Reindexer::SetSchema(string_view nsName, string_view schema) { return impl_->SetSchema(nsName, schema, ctx_); }
-Error Reindexer::GetSchema(string_view nsName, string& schema) { return impl_->GetSchema(nsName, schema, ctx_); }
 Error Reindexer::UpdateIndex(string_view nsName, const IndexDef& idx) { return impl_->UpdateIndex(nsName, idx, ctx_); }
 Error Reindexer::DropIndex(string_view nsName, const IndexDef& index) { return impl_->DropIndex(nsName, index, ctx_); }
 Error Reindexer::EnumNamespaces(vector<NamespaceDef>& defs, EnumNamespacesOpts opts) { return impl_->EnumNamespaces(defs, opts, ctx_); }
 Error Reindexer::InitSystemNamespaces() { return impl_->InitSystemNamespaces(); }
-Error Reindexer::SubscribeUpdates(IUpdatesObserver* observer, const UpdatesFilters& filters, SubscriptionOpts opts) {
-	return impl_->SubscribeUpdates(observer, filters, opts);
-}
-Error Reindexer::UnsubscribeUpdates(IUpdatesObserver* observer) { return impl_->UnsubscribeUpdates(observer); }
+Error Reindexer::SubscribeUpdates(IUpdatesObserver* observer, bool subscribe) { return impl_->SubscribeUpdates(observer, subscribe); }
 Error Reindexer::GetSqlSuggestions(const string_view sqlQuery, int pos, vector<string>& suggestions) {
 	return impl_->GetSqlSuggestions(sqlQuery, pos, suggestions, ctx_);
 }

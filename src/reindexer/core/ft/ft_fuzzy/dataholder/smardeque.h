@@ -59,7 +59,6 @@ public:
 	SmartDeque(const SmartDeque& rhs);
 	SmartDeque& operator=(const SmartDeque& rhs);
 	SmartDeque(SmartDeque&& rhs) noexcept;
-	SmartDeque& operator=(SmartDeque&& rhs) noexcept;
 
 	void Add(size_t id, const T& context);
 	void Delete(size_t id);

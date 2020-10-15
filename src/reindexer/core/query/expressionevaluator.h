@@ -11,7 +11,7 @@ class TagsMatcher;
 
 class ExpressionEvaluator {
 public:
-	ExpressionEvaluator(const PayloadType& type, TagsMatcher& tagsMatcher, FunctionExecutor& func, const std::string& forField);
+	ExpressionEvaluator(const PayloadType& type, TagsMatcher& tagsMatcher, FunctionExecutor& func, const string& forField);
 
 	Variant Evaluate(tokenizer& parser, const PayloadValue& v);
 	Variant Evaluate(const string_view& expr, const PayloadValue& v);
@@ -24,6 +24,6 @@ private:
 	const PayloadType& type_;
 	TagsMatcher& tagsMatcher_;
 	FunctionExecutor& functionExecutor_;
-	std::string forField_;
+	string forField_;
 };
 }  // namespace reindexer

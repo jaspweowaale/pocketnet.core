@@ -5,10 +5,6 @@
 #include "estl/intrusive_ptr.h"
 #include "estl/string_view.h"
 
-#ifndef REINDEX_CORE_BUILD
-#define REINDEX_CORE_BUILD 1
-#endif
-
 #ifdef REINDEX_CORE_BUILD
 #include "spdlog/fmt/bundled/printf.h"
 #include "spdlog/fmt/fmt.h"
@@ -25,7 +21,7 @@ public:
 	Error(int code, const char *fmt, const Args &... args) : Error(code, fmt::sprintf(fmt, args...)) {}
 #endif	// REINDEX_CORE_BUILD
 
-	const std::string &what() const;
+	const string &what() const;
 	int code() const;
 	bool ok() const { return !ptr_; }
 
@@ -33,7 +29,7 @@ public:
 
 protected:
 	struct payload {
-		payload(int code, const std::string &what) : code_(code), what_(what) {}
+		payload(int code, const string &what) : code_(code), what_(what) {}
 		int code_;
 		std::string what_;
 	};

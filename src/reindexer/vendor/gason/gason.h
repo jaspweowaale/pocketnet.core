@@ -46,11 +46,6 @@ struct JsonString {
 	const char *ptr;
 };
 
-inline static std::ostream &operator<<(std::ostream &o, const gason::JsonString &sv) {
-	o.write(sv.data(), sv.length());
-	return o;
-}
-
 union JsonValue {
 	JsonValue(double x) : fval(x) { u.tag = JSON_DOUBLE; }
 	JsonValue(int64_t x) : ival(x) { u.tag = JSON_NUMBER; }
@@ -190,7 +185,7 @@ class JsonAllocator {
 	} * head;
 
 public:
-	JsonAllocator() : head(nullptr) {}
+	JsonAllocator() : head(nullptr){};
 	JsonAllocator(const JsonAllocator &) = delete;
 	JsonAllocator &operator=(const JsonAllocator &) = delete;
 	JsonAllocator(JsonAllocator &&x) : head(x.head) { x.head = nullptr; }
@@ -208,15 +203,14 @@ public:
 };
 
 int jsonParse(span<char> str, char **endptr, JsonValue *value, JsonAllocator &allocator);
-bool isHomogeneousArray(const JsonValue &v);
 
 // Parser wrapper
 class JsonParser {
 public:
 	// Inplace parse. Buffer pointed by str will be changed
-	JsonNode Parse(span<char> str, size_t *length = nullptr);
+	JsonNode Parse(span<char> str);
 	// Copy str. Buffer pointed by str will be copied
-	JsonNode Parse(string_view str, size_t *length = nullptr);
+	JsonNode Parse(string_view str);
 
 private:
 	JsonAllocator alloc_;

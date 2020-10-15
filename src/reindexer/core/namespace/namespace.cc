@@ -31,13 +31,12 @@ void Namespace::CommitTransaction(Transaction& tx, QueryResults& result, const R
 				ns->cancelCommit_ = false;	// -V519
 				nsCopy_.reset(new NamespaceImpl(*ns));
 				nsCopyCalc.HitManualy();
-				nsCopy_->CommitTransaction(tx, result, NsContext(ctx).NoLock());
 				calc.SetCounter(nsCopy_->updatePerfCounter_);
+				nsCopy_->CommitTransaction(tx, result, NsContext(ctx).NoLock());
 				ns->markReadOnly();
 				atomicStoreMainNs(nsCopy_.release());
 				hasCopy_.store(false, std::memory_order_release);
 			} catch (...) {
-				calc.enable_ = false;
 				nsCopy_.reset();
 				hasCopy_.store(false, std::memory_order_release);
 				throw;
@@ -120,17 +119,13 @@ void Namespace::doRename(Namespace::Ptr dst, const std::string& newName, const s
 			throw Error(errParams, "Unable to rename '%s' to '%s'", srcNs.dbpath_, dbpath);
 		}
 	}
-
 	if (dst) {
-		logPrintf(LogInfo, "Rename namespace '%s' to '%s'", srcNs.name_, dstNs->name_);
 		srcNs.name_ = dstNs->name_;
 		assert(dstMtx);
 		dstMtx->unlock();
 	} else {
-		logPrintf(LogInfo, "Rename namespace '%s' to '%s'", srcNs.name_, newName);
 		srcNs.name_ = newName;
 	}
-	srcNs.payloadType_.SetName(srcNs.name_);
 
 	if (hadStorage) {
 		logPrintf(LogTrace, "Storage was moved from %s to %s", srcNs.dbpath_, dbpath);

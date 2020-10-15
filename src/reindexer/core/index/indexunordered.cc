@@ -9,9 +9,6 @@
 
 namespace reindexer {
 
-constexpr int kMaxIdsForDistinct = 500;
-constexpr int kMaxSelectivityPercentForIdset = 20;
-
 template <typename T>
 IndexUnordered<T>::IndexUnordered(const IndexDef &idef, const PayloadType payloadType, const FieldsSet &fields)
 	: IndexStore<typename T::key_type>(idef, payloadType, fields), idx_map(payloadType, fields, idef.opts_.collateOpts_) {}
@@ -34,21 +31,13 @@ size_t heap_size<key_string>(const key_string &kt) {
 	return kt->heap_size() + sizeof(*kt.get());
 }
 
-struct DeepClean {
-	template <typename T>
-	void operator()(T &v) const {
-		free_node(v.first);
-		free_node(v.second);
-	}
+template <typename T, typename std::enable_if<std::is_const<T>::value>::type * = nullptr>
+void free_node(T &) {}
 
-	template <typename T, typename std::enable_if<std::is_const<T>::value>::type * = nullptr>
-	static void free_node(T &) {}
-
-	template <typename T, typename std::enable_if<!std::is_const<T>::value>::type * = nullptr>
-	static void free_node(T &v) {
-		v = T();
-	}
-};
+template <typename T, typename std::enable_if<!std::is_const<T>::value>::type * = nullptr>
+void free_node(T &v) {
+	v = T();
+}
 
 template <typename T>
 void IndexUnordered<T>::addMemStat(typename T::iterator it) {
@@ -110,12 +99,14 @@ void IndexUnordered<T>::Delete(const Variant &key, IdType id) {
 	delcnt = keyIt->second.Unsorted().Erase(id);
 	(void)delcnt;
 	// TODO: we have to implement removal of composite indexes (doesn't work right now)
-	assertf(this->opts_.IsArray() || this->Opts().IsSparse() || delcnt, "Delete unexists id from index '%s' id=%d,key=%s (%s)", this->name_,
-			id, key.As<string>(this->payloadType_, this->fields_), Variant(keyIt->first).As<string>(this->payloadType_, this->fields_));
+	assertf(this->opts_.IsArray() || this->Opts().IsSparse() || delcnt, "Delete unexists id from index '%s' id=%d,key=%s", this->name_, id,
+			key.As<string>());
 
 	if (keyIt->second.Unsorted().IsEmpty()) {
 		this->tracker_.markDeleted(keyIt);
-		idx_map.template erase<DeepClean>(keyIt);
+		free_node(keyIt->first);
+		free_node(keyIt->second);
+		idx_map.erase(keyIt);
 	} else {
 		addMemStat(keyIt);
 		this->tracker_.markUpdated(this->idx_map, keyIt);
@@ -127,34 +118,32 @@ void IndexUnordered<T>::Delete(const Variant &key, IdType id) {
 }
 
 template <typename T>
-bool IndexUnordered<T>::tryIdsetCache(const VariantArray &keys, CondType condition, SortType sortId,
-									  std::function<bool(SelectKeyResult &)> selector, SelectKeyResult &res) {
+void IndexUnordered<T>::tryIdsetCache(const VariantArray &keys, CondType condition, SortType sortId,
+									  std::function<void(SelectKeyResult &)> selector, SelectKeyResult &res) {
 	if (!cache_ || isComposite(this->Type())) {
 		selector(res);
-		return false;
+		return;
 	}
-	bool scanWin = false;
 
 	IdSetCacheKey ckey{keys, condition, sortId};
 	auto cached = cache_->Get(ckey);
 	if (cached.valid) {
 		if (!cached.val.ids) {
-			scanWin = selector(res);
-			if (!scanWin) cache_->Put(ckey, res.mergeIdsets());
+			selector(res);
+			cache_->Put(ckey, res.mergeIdsets());
 		} else {
 			res.push_back(SingleSelectKeyResult(cached.val.ids));
 		}
 	} else {
-		scanWin = selector(res);
+		selector(res);
 	}
-	return scanWin;
 }
 
 template <typename T>
 SelectKeyResults IndexUnordered<T>::SelectKey(const VariantArray &keys, CondType condition, SortType sortId, Index::SelectOpts opts,
-											  BaseFunctionCtx::Ptr funcCtx, const RdxContext &rdxCtx) {
+											  BaseFunctionCtx::Ptr ctx, const RdxContext &rdxCtx) {
 	const auto indexWard(rdxCtx.BeforeIndexWork());
-	if (opts.forceComparator) return IndexStore<typename T::key_type>::SelectKey(keys, condition, sortId, opts, funcCtx, rdxCtx);
+	if (opts.forceComparator) return IndexStore<typename T::key_type>::SelectKey(keys, condition, sortId, opts, ctx, rdxCtx);
 
 	SelectKeyResult res;
 
@@ -174,35 +163,22 @@ SelectKeyResults IndexUnordered<T>::SelectKey(const VariantArray &keys, CondType
 					T *i_map;
 					const VariantArray &keys;
 					SortType sortId;
-					Index::SelectOpts opts;
-				} ctx = {&this->idx_map, keys, sortId, opts};
-				// should return true, if fallback to comparator required
-				auto selector = [&ctx](SelectKeyResult &res) -> bool {
-					size_t idsCount = 0;
+				} ctx = {&this->idx_map, keys, sortId};
+				auto selector = [&ctx](SelectKeyResult &res) {
 					res.reserve(ctx.keys.size());
 					for (auto key : ctx.keys) {
 						auto keyIt = ctx.i_map->find(static_cast<ref_type>(key));
 						if (keyIt != ctx.i_map->end()) {
 							res.push_back(SingleSelectKeyResult(keyIt->second, ctx.sortId));
-							idsCount += keyIt->second.Unsorted().size();
 						}
 					}
-					if (!ctx.opts.itemsCountInNamespace) return false;
-					// Check selectivity
-					return res.size() > 1 && (100 * idsCount / ctx.opts.itemsCountInNamespace > kMaxSelectivityPercentForIdset);
 				};
 
-				bool scanWin = false;
 				// Get from cache
 				if (!opts.distinct && !opts.disableIdSetCache && keys.size() > 1) {
-					scanWin = tryIdsetCache(keys, condition, sortId, selector, res);
+					tryIdsetCache(keys, condition, sortId, selector, res);
 				} else
-					scanWin = selector(res);
-
-				if (scanWin && !opts.distinct) {
-					// fallback to comparator, due to expensive idset
-					return IndexStore<typename T::key_type>::SelectKey(keys, condition, sortId, opts, funcCtx, rdxCtx);
-				}
+					selector(res);
 			}
 			break;
 		case CondAllSet: {
@@ -223,25 +199,19 @@ SelectKeyResults IndexUnordered<T>::SelectKey(const VariantArray &keys, CondType
 			return rslts;
 		}
 
-		case CondAny:
-			if (opts.distinct && this->idx_map.size() < kMaxIdsForDistinct) {  // TODO change to more clever condition
-				// Get set of any keys
-				res.reserve(this->idx_map.size());
-				for (auto &keyIt : this->idx_map) res.emplace_back(keyIt.second, sortId);
-				break;
-			}  // else fallthrough
+		case CondAny:  // Get set of any keys
 		case CondGe:
 		case CondLe:
 		case CondRange:
 		case CondGt:
 		case CondLt:
 		case CondLike:
-			return IndexStore<typename T::key_type>::SelectKey(keys, condition, sortId, opts, funcCtx, rdxCtx);
+			return IndexStore<typename T::key_type>::SelectKey(keys, condition, sortId, opts, ctx, rdxCtx);
 		default:
 			throw Error(errQueryExec, "Unknown query on index '%s'", this->name_);
 	}
 
-	return SelectKeyResults(std::move(res));
+	return SelectKeyResults(res);
 }
 
 template <typename T>
@@ -309,7 +279,7 @@ static Index *IndexUnordered_New(const IndexDef &idef, const PayloadType payload
 		case IndexStrHash:
 			return new IndexUnordered<unordered_str_map<KeyEntryT>>(idef, payloadType, fields);
 		case IndexCompositeHash:
-			return new IndexUnordered<unordered_payload_map<KeyEntryT, true>>(idef, payloadType, fields);
+			return new IndexUnordered<unordered_payload_map<KeyEntryT>>(idef, payloadType, fields);
 		default:
 			abort();
 	}
@@ -324,13 +294,13 @@ template class IndexUnordered<number_map<int, Index::KeyEntryPlain>>;
 template class IndexUnordered<number_map<int64_t, Index::KeyEntryPlain>>;
 template class IndexUnordered<number_map<double, Index::KeyEntryPlain>>;
 template class IndexUnordered<str_map<Index::KeyEntryPlain>>;
-template class IndexUnordered<payload_map<Index::KeyEntryPlain, true>>;
+template class IndexUnordered<payload_map<Index::KeyEntryPlain>>;
 template class IndexUnordered<number_map<int, Index::KeyEntry>>;
 template class IndexUnordered<number_map<int64_t, Index::KeyEntry>>;
 template class IndexUnordered<number_map<double, Index::KeyEntry>>;
 template class IndexUnordered<str_map<Index::KeyEntry>>;
-template class IndexUnordered<payload_map<Index::KeyEntry, true>>;
+template class IndexUnordered<payload_map<Index::KeyEntry>>;
 template class IndexUnordered<unordered_str_map<FtKeyEntry>>;
-template class IndexUnordered<unordered_payload_map<FtKeyEntry, true>>;
+template class IndexUnordered<unordered_payload_map<FtKeyEntry>>;
 
 }  // namespace reindexer

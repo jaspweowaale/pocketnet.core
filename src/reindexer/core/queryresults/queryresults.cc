@@ -1,7 +1,5 @@
 #include "core/queryresults/queryresults.h"
-#include "core/cbinding/resultserializer.h"
 #include "core/cjson/baseencoder.h"
-#include "core/cjson/msgpackbuilder.h"
 #include "core/itemimpl.h"
 #include "joinresults.h"
 #include "tools/logger.h"
@@ -18,7 +16,7 @@ struct QueryResults::Context {
 	FieldsSet fieldsFilter_;
 };
 
-static_assert(sizeof(QueryResults::Context) <= QueryResults::kSizeofContext,
+static_assert(sizeof(QueryResults::Context) < QueryResults::kSizeofContext,
 			  "QueryResults::kSizeofContext should >=  sizeof(QueryResults::Context)");
 
 QueryResults::QueryResults(std::initializer_list<ItemRef> l) : items_(l), holdActivity_(false), noActivity_(0) {}
@@ -27,9 +25,8 @@ QueryResults::QueryResults(QueryResults &&obj)
 	: joined_(std::move(obj.joined_)),
 	  aggregationResults(std::move(obj.aggregationResults)),
 	  totalCount(obj.totalCount),
-	  haveRank(obj.haveRank),
+	  haveProcent(obj.haveProcent),
 	  nonCacheableData(obj.nonCacheableData),
-	  needOutputRank(obj.needOutputRank),
 	  ctxs(std::move(obj.ctxs)),
 	  explainResults(std::move(obj.explainResults)),
 	  lockedResults_(obj.lockedResults_),
@@ -52,9 +49,8 @@ QueryResults &QueryResults::operator=(QueryResults &&obj) noexcept {
 		assert(!obj.items_.size());
 		joined_ = std::move(obj.joined_);
 		aggregationResults = std::move(obj.aggregationResults);
-		totalCount = obj.totalCount;
-		haveRank = obj.haveRank;
-		needOutputRank = obj.needOutputRank;
+		totalCount = std::move(obj.totalCount);
+		haveProcent = std::move(obj.haveProcent);
 		ctxs = std::move(obj.ctxs);
 		nonCacheableData = std::move(obj.nonCacheableData);
 		lockedResults_ = std::move(obj.lockedResults_);
@@ -104,7 +100,7 @@ void QueryResults::lockResults(bool lock) {
 		lockItem(items_[i], items_[i].Nsid(), lock);
 		if (joined_.empty()) continue;
 		Iterator itemIt{this, int(i), errOK};
-		auto joinIt = itemIt.GetJoined();
+		auto joinIt = joins::ItemIterator::FromQRIterator(itemIt);
 		if (joinIt.getJoinedItemsCount() == 0) continue;
 		size_t joinedNs = joined_.size();
 		for (auto fieldIt = joinIt.begin(); fieldIt != joinIt.end(); ++fieldIt, ++joinedNs) {
@@ -141,7 +137,7 @@ void QueryResults::Dump() const {
 		buf += std::to_string(items_[i].Id());
 		if (joined_.empty()) continue;
 		Iterator itemIt{this, int(i), errOK};
-		auto joinIt = itemIt.GetJoined();
+		auto joinIt = joins::ItemIterator::FromQRIterator(itemIt);
 		if (joinIt.getJoinedItemsCount() > 0) {
 			buf += "[";
 			for (auto fieldIt = joinIt.begin(); fieldIt != joinIt.end(); ++fieldIt) {
@@ -177,7 +173,7 @@ class QueryResults::EncoderDatasourceWithJoins : public IEncoderDatasourceWithJo
 public:
 	EncoderDatasourceWithJoins(const joins::ItemIterator &joinedItemIt, const ContextsVector &ctxs, int ctxIdx)
 		: joinedItemIt_(joinedItemIt), ctxs_(ctxs), ctxId_(ctxIdx) {}
-	~EncoderDatasourceWithJoins() override = default;
+	~EncoderDatasourceWithJoins() {}
 
 	size_t GetJoinedRowsCount() const final { return joinedItemIt_.getJoinedFieldsCount(); }
 	size_t GetJoinedRowItemsCount(size_t rowId) const final {
@@ -210,21 +206,6 @@ private:
 	const int ctxId_;
 };
 
-class AdditionalDatasource : public IAdditionalDatasource<JsonBuilder> {
-public:
-	AdditionalDatasource(double r, IEncoderDatasourceWithJoins *jds) : joinsDs_(jds), withRank_(true), rank_(r) {}
-	AdditionalDatasource(IEncoderDatasourceWithJoins *jds) : joinsDs_(jds), withRank_(false), rank_(0.0) {}
-	void PutAdditionalFields(JsonBuilder &builder) const final {
-		if (withRank_) builder.Put("rank()", rank_);
-	}
-	IEncoderDatasourceWithJoins *GetJoinsDatasource() final { return joinsDs_; }
-
-private:
-	IEncoderDatasourceWithJoins *joinsDs_;
-	bool withRank_;
-	double rank_;
-};
-
 void QueryResults::encodeJSON(int idx, WrSerializer &ser) const {
 	auto &itemRef = items_[idx];
 	assert(ctxs.size() > itemRef.Nsid());
@@ -236,53 +217,18 @@ void QueryResults::encodeJSON(int idx, WrSerializer &ser) const {
 	}
 	ConstPayload pl(ctx.type_, itemRef.Value());
 	JsonEncoder encoder(&ctx.tagsMatcher_, &ctx.fieldsFilter_);
-	JsonBuilder builder(ser, ObjType::TypePlain);
+
+	JsonBuilder builder(ser, JsonBuilder::TypePlain);
 
 	if (!joined_.empty()) {
-		joins::ItemIterator itemIt = (begin() + idx).GetJoined();
+		joins::ItemIterator itemIt = joins::ItemIterator::FromQRIterator(begin() + idx);
 		if (itemIt.getJoinedItemsCount() > 0) {
-			EncoderDatasourceWithJoins joinsDs(itemIt, ctxs, GetJoinedNsCtxIndex(itemRef.Nsid()));
-			if (needOutputRank) {
-				AdditionalDatasource ds(itemRef.Proc(), &joinsDs);
-				encoder.Encode(&pl, builder, &ds);
-			} else {
-				AdditionalDatasource ds(&joinsDs);
-				encoder.Encode(&pl, builder, &ds);
-			}
+			EncoderDatasourceWithJoins ds(itemIt, ctxs, GetJoinedNsCtxIndex(itemRef.Nsid()));
+			encoder.Encode(&pl, builder, &ds);
 			return;
 		}
 	}
-	if (needOutputRank) {
-		AdditionalDatasource ds(itemRef.Proc(), nullptr);
-		encoder.Encode(&pl, builder, &ds);
-	} else {
-		encoder.Encode(&pl, builder);
-	}
-}
-
-joins::ItemIterator QueryResults::Iterator::GetJoined() { return reindexer::joins::ItemIterator::CreateFrom(*this); }
-
-Error QueryResults::Iterator::GetMsgPack(WrSerializer &wrser, bool withHdrLen) {
-	auto &itemRef = qr_->items_[idx_];
-	assert(qr_->ctxs.size() > itemRef.Nsid());
-	auto &ctx = qr_->ctxs[itemRef.Nsid()];
-
-	if (itemRef.Value().IsFree()) {
-		return Error(errNotFound, "Item not found");
-	}
-
-	int startTag = 0;
-	ConstPayload pl(ctx.type_, itemRef.Value());
-	MsgPackEncoder msgpackEncoder(&ctx.tagsMatcher_);
-	const TagsLengths &tagsLengths = msgpackEncoder.GetTagsMeasures(&pl);
-	MsgPackBuilder msgpackBuilder(wrser, &tagsLengths, &startTag, ObjType::TypePlain, const_cast<TagsMatcher *>(&ctx.tagsMatcher_));
-	if (withHdrLen) {
-		auto slicePosSaver = wrser.StartSlice();
-		msgpackEncoder.Encode(&pl, msgpackBuilder);
-	} else {
-		msgpackEncoder.Encode(&pl, msgpackBuilder);
-	}
-	return errOK;
+	encoder.Encode(&pl, builder);
 }
 
 Error QueryResults::Iterator::GetJSON(WrSerializer &ser, bool withHdrLen) {
@@ -311,7 +257,7 @@ Error QueryResults::Iterator::GetCJSON(WrSerializer &ser, bool withHdrLen) {
 		}
 
 		ConstPayload pl(ctx.type_, itemRef.Value());
-		CJsonBuilder builder(ser, ObjType::TypePlain);
+		CJsonBuilder builder(ser, CJsonBuilder::TypePlain);
 		CJsonEncoder cjsonEncoder(&ctx.tagsMatcher_, &ctx.fieldsFilter_);
 
 		if (withHdrLen) {
@@ -366,12 +312,12 @@ QueryResults::Iterator &QueryResults::Iterator::operator+(int val) {
 bool QueryResults::Iterator::operator!=(const Iterator &other) const { return idx_ != other.idx_; }
 bool QueryResults::Iterator::operator==(const Iterator &other) const { return idx_ == other.idx_; }
 
-void QueryResults::AddItem(Item &item, bool withData, bool singleValue) {
+void QueryResults::AddItem(Item &item, bool withData) {
 	auto ritem = item.impl_;
 	if (item.GetID() != -1) {
 		if (ctxs.empty()) ctxs.push_back(Context(ritem->Type(), ritem->tagsMatcher(), FieldsSet()));
 		Add(ItemRef(item.GetID(), withData ? ritem->RealValue() : PayloadValue()));
-		if (withData && singleValue) {
+		if (withData) {
 			lockResults();
 		}
 	}

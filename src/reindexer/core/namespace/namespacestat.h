@@ -5,9 +5,7 @@
 #include <mutex>
 #include <string>
 #include <vector>
-#include "core/lsn.h"
 #include "estl/span.h"
-#include "gason/gason.h"
 #include "tools/errors.h"
 
 namespace reindexer {
@@ -40,10 +38,9 @@ struct IndexMemStat {
 struct MasterState {
 	void GetJSON(JsonBuilder &builder);
 	void FromJSON(span<char>);
-	void FromJSON(const gason::JsonNode &root);
 
 	// LSN of last change
-	lsn_t lastUpstreamLSNm;
+	int64_t lastLsn = -1;
 	// Data hash
 	uint64_t dataHash = 0;
 	// Data count
@@ -59,12 +56,9 @@ struct ReplicationState {
 	void FromJSON(span<char>);
 
 	// LSN of last change
-	// updated from WAL when querying the structure
-	lsn_t lastLsn;
-	// Slave mode flag (only read operation enabled)
+	int64_t lastLsn = -1;
+	// Slave mode flag
 	bool slaveMode = false;
-	// enable replication
-	bool replicatorEnabled = false;
 	// Temporary namespace flag
 	bool temporary = false;
 	// Replication error
@@ -81,10 +75,6 @@ struct ReplicationState {
 	Status status = Status::None;
 	// Current master state
 	MasterState masterState;
-
-	lsn_t originLSN;
-	lsn_t lastSelfLSN;
-	lsn_t lastUpstreamLSN;
 };
 
 struct ReplicationStat : public ReplicationState {

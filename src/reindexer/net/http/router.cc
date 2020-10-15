@@ -41,8 +41,6 @@ HttpStatusCode HttpStatus::errCodeToHttpStatus(int errCode) {
 	switch (errCode) {
 		case errOK:
 			return StatusOK;
-		case errNotFound:
-			return StatusNotFound;
 		case errParams:
 			return StatusBadRequest;
 		case errForbidden:
@@ -64,14 +62,6 @@ int Context::JSON(int code, chunk &&chunk) {
 	writer->SetContentLength(chunk.len_);
 	writer->SetRespCode(code);
 	writer->SetHeader(http::Header{"Content-Type"_sv, "application/json; charset=utf-8"_sv});
-	writer->Write(std::move(chunk));
-	return 0;
-}
-
-int Context::MSGPACK(int code, chunk &&chunk) {
-	writer->SetContentLength(chunk.len_);
-	writer->SetRespCode(code);
-	writer->SetHeader(http::Header{"Content-Type"_sv, "application/x-msgpack; charset=utf-8"_sv});
 	writer->Write(std::move(chunk));
 	return 0;
 }

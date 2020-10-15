@@ -61,9 +61,6 @@ typedef enum QueryItemType {
 	QueryCloseBracket,
 	QueryJoinCondition,
 	QueryDropField,
-	QueryUpdateObject,
-	QueryWithRank,
-	QueryStrictMode,
 } QueryItemType;
 
 typedef enum QuerySerializeMode {
@@ -113,7 +110,6 @@ enum ErrorCode {
 	errTagsMissmatch = 21,
 	errReplParams = 22,
 	errNamespaceInvalidated = 23,
-	errParseMsgPack = 24,
 };
 
 enum QueryType { QuerySelect, QueryDelete, QueryUpdate, QueryTruncate };
@@ -122,19 +118,17 @@ enum OpType { OpOr = 1, OpAnd = 2, OpNot = 3 };
 
 enum ArithmeticOpType { OpPlus = 0, OpMinus = 1, OpMult = 2, OpDiv = 3 };
 
-enum AggType { AggSum, AggAvg, AggFacet, AggMin, AggMax, AggDistinct, AggUnknown = -1 };
+enum AggType { AggSum, AggAvg, AggFacet, AggMin, AggMax, AggUnknown = -1 };
 
-enum JoinType { LeftJoin, InnerJoin, OrInnerJoin, MergeRX };
+enum JoinType { LeftJoin, InnerJoin, OrInnerJoin, Merge };
 
 enum CalcTotalMode { ModeNoTotal, ModeCachedTotal, ModeAccurateTotal };
 
-enum DataFormat { FormatJson, FormatCJson, FormatMsgPack };
+enum DataFormat { FormatJson, FormatCJson };
 
 enum QueryResultItemType { QueryResultEnd, QueryResultAggregation, QueryResultExplain };
 
 enum CacheMode { CacheModeOn = 0, CacheModeAggressive = 1, CacheModeOff = 2 };
-
-enum StrictMode { StrictModeNotSet = 0, StrictModeNone, StrictModeNames, StrictModeIndexes };
 
 typedef int IdType;
 typedef unsigned SortType;
@@ -150,23 +144,16 @@ enum {
 	kResultsPtrs = 0x1,
 	kResultsCJson = 0x2,
 	kResultsJson = 0x3,
-	kResultsMsgPack = 0x4,
 
 	kResultsWithPayloadTypes = 0x10,
 	kResultsWithItemID = 0x20,
-	kResultsWithRank = 0x40,
+	kResultsWithPercents = 0x40,
 	kResultsWithNsID = 0x80,
 	kResultsWithJoined = 0x100,
-	kResultsWithRaw = 0x200,
-	kResultsNeedOutputRank = 0x400,
+	kResultsWithRaw = 0x200
 };
 
-typedef enum IndexOpt {
-	kIndexOptPK = 1 << 7,
-	kIndexOptArray = 1 << 6,
-	kIndexOptDense = 1 << 5,
-	kIndexOptSparse = 1 << 3,
-} IndexOpt;
+typedef enum IndexOpt { kIndexOptPK = 1 << 7, kIndexOptArray = 1 << 6, kIndexOptDense = 1 << 5, kIndexOptSparse = 1 << 3 } IndexOpt;
 
 typedef enum StotageOpt {
 	kStorageOptEnabled = 1 << 0,
@@ -177,6 +164,7 @@ typedef enum StotageOpt {
 	kStorageOptSync = 1 << 5,
 	kStorageOptLazyLoad = 1 << 6,
 	kStorageOptSlaveMode = 1 << 7,
+	kStorageOptTemporary = 1 << 8,
 	kStorageOptAutorepair = 1 << 9,
 } StorageOpt;
 
@@ -185,7 +173,6 @@ enum CollateMode { CollateNone = 0, CollateASCII, CollateUTF8, CollateNumeric, C
 enum FieldModifyMode {
 	FieldModeSet = 0,
 	FieldModeDrop = 1,
-	FieldModeSetJson = 2,
 };
 
 enum ItemModifyMode { ModeUpdate = 0, ModeInsert = 1, ModeUpsert = 2, ModeDelete = 3 };
@@ -202,6 +189,7 @@ typedef struct StorageOpts {
 	bool IsSync() const { return options & kStorageOptSync; }
 	bool IsLazyLoad() const { return options & kStorageOptLazyLoad; }
 	bool IsSlaveMode() const { return options & kStorageOptSlaveMode; }
+	bool IsTemporary() const { return options & kStorageOptTemporary; }
 	bool IsAutorepair() const { return options & kStorageOptAutorepair; }
 
 	StorageOpts& Enabled(bool value = true) {
@@ -244,6 +232,11 @@ typedef struct StorageOpts {
 		return *this;
 	}
 
+	StorageOpts& Temporary(bool value = true) {
+		options = value ? options | kStorageOptTemporary : options & ~(kStorageOptTemporary);
+		return *this;
+	}
+
 	StorageOpts& Autorepair(bool value = true) {
 		options = value ? options | kStorageOptAutorepair : options & ~(kStorageOptAutorepair);
 		return *this;
@@ -258,7 +251,6 @@ typedef enum ConnectOpt {
 	kConnectOptAllowNamespaceErrors = 1 << 1,
 	kConnectOptAutorepair = 1 << 2,
 	kConnectOptCheckClusterID = 1 << 3,
-	kConnectOptWarnVersion = 1 << 4,
 } ConnectOpt;
 
 typedef enum StorageTypeOpt {
@@ -314,20 +306,3 @@ typedef struct ConnectOpts {
 } ConnectOpts;
 
 enum IndexValueType { NotSet = -1, SetByJsonPath = -2 };
-
-enum SubscriptionOpt {
-	kSubscriptionOptIncrementSubscription = 1 << 0,
-};
-
-typedef struct SubscriptionOpts {
-#ifdef __cplusplus
-	SubscriptionOpts() : options(0) {}
-
-	bool IsIncrementSubscription() const { return options & kSubscriptionOptIncrementSubscription; }
-	SubscriptionOpts& IncrementSubscription(bool value = true) {
-		options = value ? options | kSubscriptionOptIncrementSubscription : options & ~(kSubscriptionOptIncrementSubscription);
-		return *this;
-	}
-#endif
-	uint16_t options;
-} SubscriptionOpts;

@@ -2,7 +2,6 @@
 #include "walrecord.h"
 #include "core/cjson/baseencoder.h"
 #include "core/transactionimpl.h"
-#include "tools/logger.h"
 #include "tools/serializer.h"
 
 namespace reindexer {
@@ -11,16 +10,10 @@ enum { TxBit = (1 << 7) };
 
 void PackedWALRecord::Pack(const WALRecord &rec) {
 	WrSerializer ser;
-	rec.Pack(ser);
-	assign(ser.Buf(), ser.Buf() + ser.Len());
-}
-
-void WALRecord::Pack(WrSerializer &ser) const {
-	if (type == WalEmpty) return;
-	ser.PutVarUint(inTransaction ? (type | TxBit) : type);
-	switch (type) {
+	ser.PutVarUint(rec.inTransaction ? (rec.type | TxBit) : rec.type);
+	switch (rec.type) {
 		case WalItemUpdate:
-			ser.PutUInt32(id);
+			ser.PutUInt32(rec.id);
 			break;
 		case WalUpdateQuery:
 		case WalIndexAdd:
@@ -28,18 +21,16 @@ void WALRecord::Pack(WrSerializer &ser) const {
 		case WalIndexUpdate:
 		case WalReplState:
 		case WalNamespaceRename:
-		case WalForceSync:
-		case WalSetSchema:
-			ser.PutVString(data);
+			ser.PutVString(rec.data);
 			break;
 		case WalPutMeta:
-			ser.PutVString(putMeta.key);
-			ser.PutVString(putMeta.value);
+			ser.PutVString(rec.putMeta.key);
+			ser.PutVString(rec.putMeta.value);
 			break;
 		case WalItemModify:
-			ser.PutVString(itemModify.itemCJson);
-			ser.PutVarUint(itemModify.modifyMode);
-			ser.PutVarUint(itemModify.tmVersion);
+			ser.PutVString(rec.itemModify.itemCJson);
+			ser.PutVarUint(rec.itemModify.modifyMode);
+			ser.PutVarUint(rec.itemModify.tmVersion);
 			break;
 		case WalEmpty:
 			ser.Reset();
@@ -50,9 +41,11 @@ void WALRecord::Pack(WrSerializer &ser) const {
 		case WalCommitTransaction:
 			break;
 		default:
-			fprintf(stderr, "Unexpected WAL rec type %d\n", int(type));
+			fprintf(stderr, "Unexpected WAL rec type %d\n", int(rec.type));
 			std::abort();
 	}
+	clear();
+	assign(ser.Buf(), ser.Buf() + ser.Len());
 }
 
 WALRecord::WALRecord(span<uint8_t> packed) {
@@ -79,8 +72,6 @@ WALRecord::WALRecord(span<uint8_t> packed) {
 		case WalIndexUpdate:
 		case WalReplState:
 		case WalNamespaceRename:
-		case WalForceSync:
-		case WalSetSchema:
 			data = ser.GetVString();
 			break;
 		case WalPutMeta:
@@ -99,12 +90,12 @@ WALRecord::WALRecord(span<uint8_t> packed) {
 		case WalCommitTransaction:
 			break;
 		default:
-			logPrintf(LogWarning, "Unexpected WAL rec type %d\n", int(type));
-			break;
+			fprintf(stderr, "Unexpected WAL rec type %d\n", int(type));
+			std::abort();
 	}
 }
 
-static string_view wrecType2Str(WALRecType t) {
+string_view wrecType2Str(WALRecType t) {
 	switch (t) {
 		case WalEmpty:
 			return "<WalEmpty>"_sv;
@@ -129,15 +120,11 @@ static string_view wrecType2Str(WALRecType t) {
 		case WalNamespaceRename:
 			return "WalNamespaceRename"_sv;
 		case WalItemModify:
-			return "WalItemModify"_sv;
+			return "WalItemMofify"_sv;
 		case WalInitTransaction:
 			return "WalInitTransaction"_sv;
 		case WalCommitTransaction:
 			return "WalCommitTransaction"_sv;
-		case WalForceSync:
-			return "WalForceSync"_sv;
-		case WalSetSchema:
-			return "WalSetSchema"_sv;
 		default:
 			return "<Unknown>"_sv;
 	}
@@ -162,8 +149,6 @@ WrSerializer &WALRecord::Dump(WrSerializer &ser, std::function<string(string_vie
 		case WalIndexDrop:
 		case WalIndexUpdate:
 		case WalReplState:
-		case WalForceSync:
-		case WalSetSchema:
 			return ser << ' ' << data;
 		case WalPutMeta:
 			return ser << ' ' << putMeta.key << "=" << putMeta.value;
@@ -196,9 +181,6 @@ void WALRecord::GetJSON(JsonBuilder &jb, std::function<string(string_view)> cjso
 		case WalNamespaceRename:
 			jb.Put("dst_ns_name", data);
 			return;
-		case WalForceSync:
-			jb.Put("ns_def", data);
-			return;
 		case WalIndexAdd:
 		case WalIndexDrop:
 		case WalIndexUpdate:
@@ -215,9 +197,6 @@ void WALRecord::GetJSON(JsonBuilder &jb, std::function<string(string_view)> cjso
 			jb.Put("mode", itemModify.modifyMode);
 			jb.Raw("item", cjsonViewer(itemModify.itemCJson));
 			return;
-		case WalSetSchema:
-			jb.Raw("schema", data);
-			return;
 		default:
 			fprintf(stderr, "Unexpected WAL rec type %d\n", int(type));
 			std::abort();
@@ -226,32 +205,5 @@ void WALRecord::GetJSON(JsonBuilder &jb, std::function<string(string_view)> cjso
 }
 
 WALRecord::WALRecord(string_view data) : WALRecord(span<uint8_t>(reinterpret_cast<const uint8_t *>(data.data()), data.size())) {}
-
-SharedWALRecord WALRecord::GetShared(int64_t lsn, int64_t upstreamLSN, string_view nsName) const {
-	if (!shared_.packed_) {
-		shared_ = SharedWALRecord(lsn, upstreamLSN, nsName, *this);
-	}
-	return shared_;
-}
-SharedWALRecord::SharedWALRecord(int64_t lsn, int64_t originLSN, string_view nsName, const WALRecord &rec) {
-	WrSerializer ser;
-	ser.PutVarint(lsn);
-	ser.PutVarint(originLSN);
-	ser.PutVString(nsName);
-	{
-		auto sl = ser.StartSlice();
-		rec.Pack(ser);
-	}
-	packed_.reset(new intrusive_atomic_rc_wrapper<chunk>(ser.DetachChunk()));
-}
-
-SharedWALRecord::Unpacked SharedWALRecord::Unpack() {
-	Serializer rdser(packed_->data(), packed_->size());
-	int64_t lsn = rdser.GetVarint();
-	int64_t originLSN = rdser.GetVarint();
-	p_string nsName = rdser.GetPVString();
-	p_string pwal = rdser.GetPSlice();
-	return {lsn, originLSN, nsName, pwal};
-}
 
 }  // namespace reindexer

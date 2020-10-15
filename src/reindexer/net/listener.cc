@@ -5,6 +5,7 @@
 #include <thread>
 #include "core/type_consts.h"
 #include "net/http/serverconnection.h"
+#include "server/pprof/gperf_profiler.h"
 #include "tools/alloc_ext/tc_malloc_extension.h"
 #include "tools/logger.h"
 
@@ -69,16 +70,11 @@ void Listener::io_accept(ev::io & /*watcher*/, int revents) {
 	if (shared_->idle_.size()) {
 		auto conn = std::move(shared_->idle_.back());
 		shared_->idle_.pop_back();
-		lck.unlock();
 		conn->Attach(loop_);
 		conn->Restart(client.fd());
-		lck.lock();
 		connections_.push_back(std::move(conn));
 	} else {
-		lck.unlock();
-		auto conn = std::unique_ptr<IServerConnection>(shared_->connFactory_(loop_, client.fd()));
-		lck.lock();
-		connections_.push_back(std::move(conn));
+		connections_.push_back(std::unique_ptr<IServerConnection>(shared_->connFactory_(loop_, client.fd())));
 	}
 	rebalance();
 
@@ -91,18 +87,12 @@ void Listener::io_accept(ev::io & /*watcher*/, int revents) {
 
 void Listener::timeout_cb(ev::periodic &, int) {
 	std::unique_lock<std::mutex> lck(shared_->lck_);
-	bool enableReuseIdle = !std::getenv("REINDEXER_NOREUSEIDLE");
 
 	// Move finished connections to idle connections pool
 	for (unsigned i = 0; i < connections_.size();) {
 		if (connections_[i]->IsFinished()) {
 			connections_[i]->Detach();
-			if (enableReuseIdle) {
-				shared_->idle_.push_back(std::move(connections_[i]));
-			} else {
-				connections_[i].reset();
-			}
-
+			shared_->idle_.push_back(std::move(connections_[i]));
 			if (i != connections_.size() - 1) connections_[i] = std::move(connections_.back());
 			connections_.pop_back();
 			shared_->ts_ = std::chrono::steady_clock::now();

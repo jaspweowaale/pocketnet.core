@@ -19,8 +19,8 @@ public:
 	Transaction(const Error &err);
 	~Transaction();
 	Transaction() = default;
-	Transaction(Transaction &&) noexcept;
-	Transaction &operator=(Transaction &&) noexcept;
+	Transaction(Transaction &&);
+	Transaction &operator=(Transaction &&);
 
 	void Insert(Item &&item);
 	void Update(Item &&item);

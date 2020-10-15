@@ -9,7 +9,6 @@
 #include "core/keyvalue/p_string.h"
 #include "cproto.h"
 #include "estl/string_view.h"
-#include "net/connection.h"
 #include "net/stat.h"
 #include "tools/errors.h"
 
@@ -32,19 +31,13 @@ struct ClientData {
 };
 
 struct Context;
-struct IRPCCall {
-	void (*Get)(IRPCCall *, CmdCode &, Args &);
-	intrusive_ptr<intrusive_atomic_rc_wrapper<chunk>> data_;
-};
-
 class Writer {
 public:
 	virtual ~Writer() = default;
 	virtual void WriteRPCReturn(Context &ctx, const Args &args, const Error &status) = 0;
-	virtual void CallRPC(const IRPCCall &call) = 0;
+	virtual void CallRPC(CmdCode cmd, const Args &args) = 0;
 	virtual void SetClientData(std::unique_ptr<ClientData> data) = 0;
 	virtual ClientData *GetClientData() = 0;
-	virtual std::shared_ptr<reindexer::net::ConnectionStat> GetConnectionStat() = 0;
 };
 
 struct Context {
@@ -193,13 +186,6 @@ protected:
 		return (static_cast<K *>(obj)->*func)(
 			ctx, get_arg<T1>(ctx.call->args, 0), get_arg<T2>(ctx.call->args, 1), get_arg<T3>(ctx.call->args, 2),
 			get_arg<T4>(ctx.call->args, 3), get_arg<T5>(ctx.call->args, 4), get_arg<T6>(ctx.call->args, 5), get_arg<T7>(ctx.call->args, 6));
-	}
-	template <class K, typename T1, typename T2, typename T3, typename T4, typename T5, typename T6, typename T7, typename T8>
-	static Error func_wrapper(void *obj, Error (K::*func)(Context &ctx, T1, T2, T3, T4, T5, T6, T7, T8), Context &ctx) {
-		return (static_cast<K *>(obj)->*func)(ctx, get_arg<T1>(ctx.call->args, 0), get_arg<T2>(ctx.call->args, 1),
-											  get_arg<T3>(ctx.call->args, 2), get_arg<T4>(ctx.call->args, 3),
-											  get_arg<T5>(ctx.call->args, 4), get_arg<T6>(ctx.call->args, 5),
-											  get_arg<T7>(ctx.call->args, 6), get_arg<T8>(ctx.call->args, 7));
 	}
 
 	struct Handler {

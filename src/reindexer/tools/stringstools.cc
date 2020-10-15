@@ -205,7 +205,7 @@ std::pair<int, int> Word2PosHelper::convert(int wordPos, int endPos) {
 	ret.first += lastOffset_;
 	ret.second += lastOffset_;
 	lastOffset_ = ret.first;
-	lastWordPos_ = wordPos;
+	lastWordPos_ += wordPos;
 	return ret;
 }
 
@@ -242,17 +242,11 @@ bool iequals(string_view lhs, string_view rhs) {
 	return true;
 }
 
-bool checkIfStartsWith(string_view src, string_view pattern, bool casesensitive) {
+bool checkIfStartsWith(string_view src, string_view pattern) {
 	if (src.empty() || pattern.empty()) return false;
 	if (src.length() > pattern.length()) return false;
-	if (casesensitive) {
-		for (size_t i = 0; i < src.length(); ++i) {
-			if (src[i] != pattern[i]) return false;
-		}
-	} else {
-		for (size_t i = 0; i < src.length(); ++i) {
-			if (tolower(src[i]) != tolower(pattern[i])) return false;
-		}
+	for (size_t i = 0; i < src.length(); ++i) {
+		if (tolower(src[i]) != tolower(pattern[i])) return false;
 	}
 	return true;
 }
@@ -433,27 +427,6 @@ LogLevel logLevelFromString(const string &strLogLevel) {
 	return LogNone;
 }
 
-static std::unordered_map<string, StrictMode> strictModes = {
-	{"", StrictModeNotSet}, {"none", StrictModeNone}, {"names", StrictModeNames}, {"indexes", StrictModeIndexes}};
-
-StrictMode strictModeFromString(const string &strStrictMode) {
-	auto configModeIt = strictModes.find(strStrictMode);
-	if (configModeIt != strictModes.end()) {
-		return configModeIt->second;
-	}
-	return StrictModeNotSet;
-}
-
-string_view strictModeToString(StrictMode mode) {
-	for (auto &it : strictModes) {
-		if (it.second == mode) {
-			return it.first;
-		}
-	}
-	static string_view empty = ""_sv;
-	return empty;
-}
-
 bool isPrintable(string_view str) {
 	if (str.length() > 256) {
 		return false;
@@ -528,16 +501,29 @@ void toPrevCh(string_view::iterator &it, const string_view &str) {
 template <bool isUtf8>
 Error getBytePosInMultilineString(string_view str, const size_t line, const size_t charPos, size_t &bytePos) {
 	auto it = str.begin();
-	size_t currLine = 0, currCharPos = 0;
+	size_t currLine = 0, currCharPos = 0, lastSpacePos = std::string::npos;
 	for (size_t i = 0; it != str.end() && ((currLine != line) || (currCharPos != charPos)); toNextCh<isUtf8>(it, str), ++i) {
 		if (*it == '\n') {
 			++currLine;
 		} else if (currLine == line) {
 			++currCharPos;
 		}
+		if ((currLine == line) && (*it == ' ' || *it == '\t' || *it == '\n')) {
+			lastSpacePos = i;
+		}
 	}
 	if ((currLine == line) && (charPos == currCharPos)) {
-		bytePos = it - str.begin() - 1;
+		size_t spaces = 0;
+		if (lastSpacePos != std::string::npos) {
+			auto last = str.begin() + lastSpacePos;
+			auto it2 = last;
+			while (*it2 == ' ' || *it2 == '\t' || *it2 == '\n') {
+				if (it2 == str.begin()) break;
+				toPrevCh<isUtf8>(it2, str);
+				++spaces;
+			}
+		}
+		bytePos = it - str.begin() - spaces - 1;
 		return errOK;
 	}
 	return Error(errNotValid, "Wrong cursor position: line=%d, pos=%d", line, charPos);

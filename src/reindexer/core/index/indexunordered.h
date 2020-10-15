@@ -30,7 +30,7 @@ public:
 	void SetSortedIdxCount(int sortedIdxCount) override;
 
 protected:
-	bool tryIdsetCache(const VariantArray &keys, CondType condition, SortType sortId, std::function<bool(SelectKeyResult &)> selector,
+	void tryIdsetCache(const VariantArray &keys, CondType condition, SortType sortId, std::function<void(SelectKeyResult &)> selector,
 					   SelectKeyResult &res);
 	void addMemStat(typename T::iterator it);
 	void delMemStat(typename T::iterator it);

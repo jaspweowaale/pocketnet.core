@@ -1,10 +1,9 @@
 #include "resultserializer.h"
-#include "vendor/msgpack/msgpack.h"
 
 namespace reindexer {
 namespace client {
 
-void ResultSerializer::GetRawQueryParams(ResultSerializer::QueryParams& ret, std::function<void(int nsId)> updatePayloadFunc) {
+void ResultSerializer::GetRawQueryParams(ResultSerializer::QueryParams &ret, std::function<void(int nsId)> updatePayloadFunc) {
 	ret.flags = GetVarUint();
 	ret.totalcount = GetVarUint();
 	ret.qcount = GetVarUint();
@@ -31,11 +30,7 @@ void ResultSerializer::GetRawQueryParams(ResultSerializer::QueryParams& ret, std
 		switch (tag) {
 			case QueryResultAggregation:
 				ret.aggResults.push_back({});
-				if ((ret.flags & kResultsFormatMask) == kResultsMsgPack) {
-					ret.aggResults.back().FromMsgPack(giftStr(data));
-				} else {
-					ret.aggResults.back().FromJSON(giftStr(data));
-				}
+				ret.aggResults.back().FromJSON(giftStr(data));
 				break;
 			case QueryResultExplain:
 				ret.explainResults = string(data);
@@ -55,7 +50,7 @@ ResultSerializer::ItemParams ResultSerializer::GetItemParams(int flags) {
 	if (flags & kResultsWithNsID) {
 		ret.nsid = int(GetVarUint());
 	}
-	if (flags & kResultsWithRank) {
+	if (flags & kResultsWithPercents) {
 		ret.proc = int(GetVarUint());
 	}
 
@@ -66,7 +61,6 @@ ResultSerializer::ItemParams ResultSerializer::GetItemParams(int flags) {
 	switch (flags & kResultsFormatMask) {
 		case kResultsJson:
 		case kResultsCJson:
-		case kResultsMsgPack:
 			ret.data = GetSlice();
 			break;
 		default:

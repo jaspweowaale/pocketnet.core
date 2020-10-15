@@ -37,8 +37,6 @@ enum SqlTokenType {
 	JoinedFieldNameSqlToken,
 	DeleteConditionsStart,
 	SetSqlToken,
-	UpdateOptionsSqlToken,
-	EqualPositionSqlToken,
-	JoinTypesSqlToken,
+	UpdateOptions,
 };
 }

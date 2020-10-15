@@ -34,16 +34,14 @@ struct NamespaceConfigData {
 	int noQueryIdleThreshold = 0;
 	LogLevel logLevel = LogNone;
 	CacheMode cacheMode = CacheModeOff;
-	StrictMode strictMode = StrictModeNames;
 	int startCopyPolicyTxSize = 10000;
 	int copyPolicyMultiplier = 5;
 	int txSizeToAlwaysCopy = 100000;
 	int optimizationTimeout = 800;
 	int optimizationSortWorkers = 4;
-	int64_t walSize = 4000000;
 };
 
-enum ReplicationRole { ReplicationNone, ReplicationMaster, ReplicationSlave, ReplicationReadOnly };
+enum ReplicationRole { ReplicationNone, ReplicationMaster, ReplicationSlave };
 
 struct ReplicationConfigData {
 	Error FromYML(const string &yml);
@@ -53,26 +51,22 @@ struct ReplicationConfigData {
 
 	ReplicationRole role = ReplicationNone;
 	std::string masterDSN;
-	std::string appName = "rx_slave";
 	int connPoolSize = 1;
 	int workerThreads = 1;
 	int clusterID = 1;
-	int timeoutSec = 60;
+	int timeoutSec = 30;
 	int retrySyncIntervalSec = 20;
 	int onlineReplErrorsThreshold = 100;
 	bool forceSyncOnLogicError = false;
 	bool forceSyncOnWrongDataHash = false;
 	fast_hash_set<string, nocase_hash_str, nocase_equal_str> namespaces;
-	bool enableCompression = true;
-	int serverId = 0;
 
 	bool operator==(const ReplicationConfigData &rdata) const noexcept {
 		return (role == rdata.role) && (connPoolSize == rdata.connPoolSize) && (workerThreads == rdata.workerThreads) &&
 			   (clusterID == rdata.clusterID) && (forceSyncOnLogicError == rdata.forceSyncOnLogicError) &&
 			   (forceSyncOnWrongDataHash == rdata.forceSyncOnWrongDataHash) && (masterDSN == rdata.masterDSN) &&
 			   (retrySyncIntervalSec == rdata.retrySyncIntervalSec) && (onlineReplErrorsThreshold == rdata.onlineReplErrorsThreshold) &&
-			   (timeoutSec == rdata.timeoutSec) && (namespaces == rdata.namespaces) && (enableCompression == rdata.enableCompression) &&
-			   (serverId == rdata.serverId) && (appName == rdata.appName);
+			   (timeoutSec == rdata.timeoutSec) && (namespaces == rdata.namespaces);
 	}
 	bool operator!=(const ReplicationConfigData &rdata) const noexcept { return !operator==(rdata); }
 

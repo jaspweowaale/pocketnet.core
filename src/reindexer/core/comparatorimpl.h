@@ -80,12 +80,7 @@ public:
 	bool Compare(CondType cond, T lhs) {
 		bool ret = Compare2(cond, lhs);
 		if (!ret || !distS_) return ret;
-		return distS_->find(lhs) == distS_->end();
-	}
-
-	void ExcludeDistinct(T value) { distS_->emplace(value); }
-	void ClearDistinct() {
-		if (distS_) distS_->clear();
+		return distS_->emplace(lhs).second;
 	}
 
 	h_vector<T, 1> values_;
@@ -102,7 +97,7 @@ private:
 
 	void addValue(CondType cond, T value) {
 		if (cond == CondSet) {
-			valuesS_->insert(value);
+			valuesS_->emplace(value);
 		} else {
 			values_.push_back(value);
 		}
@@ -159,12 +154,7 @@ public:
 	bool Compare(CondType cond, p_string lhs, const CollateOpts &collateOpts) {
 		bool ret = Compare2(cond, lhs, collateOpts);
 		if (!ret || !distS_) return ret;
-		return distS_->find(lhs.getOrMakeKeyString()) == distS_->end();
-	}
-
-	void ExcludeDistinct(p_string value) { distS_->emplace(value.getOrMakeKeyString()); }
-	void ClearDistinct() {
-		if (distS_) distS_->clear();
+		return distS_->emplace(lhs.getOrMakeKeyString()).second;
 	}
 
 	h_vector<key_string, 1> values_;

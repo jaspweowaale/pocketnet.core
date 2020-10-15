@@ -4,6 +4,7 @@
 #include "core/ft/config/ftfuzzyconfig.h"
 #include "core/ft/ft_fuzzy/advacedpackedvec.h"
 #include "core/ft/ft_fuzzy/dataholder/basebuildedholder.h"
+#include "core/ft/ft_fuzzy/searchers/isearcher.h"
 #include "core/ft/ftdsl.h"
 #include "core/ft/idrelset.h"
 #include "dataset.h"

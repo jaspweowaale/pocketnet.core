@@ -1,4 +1,4 @@
-//#ifdef REINDEX_WITH_LEVELDB
+#ifdef REINDEX_WITH_LEVELDB
 
 #include "leveldbstorage.h"
 
@@ -188,4 +188,4 @@ LevelDbSnapshot::~LevelDbSnapshot() { snapshot_ = nullptr; }
 }  // namespace datastorage
 }  // namespace reindexer
 
-//#endif  // REINDEX_WITH_LEVELDB
+#endif  // REINDEX_WITH_LEVELDB

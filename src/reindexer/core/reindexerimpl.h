@@ -24,8 +24,6 @@ using std::string;
 namespace reindexer {
 
 class Replicator;
-class IClientsStats;
-
 class ReindexerImpl {
 	using Mutex = MarkedMutex<shared_timed_mutex, MutexMark::Reindexer>;
 	using StorageMutex = MarkedMutex<shared_timed_mutex, MutexMark::ReindexerStorage>;
@@ -39,8 +37,7 @@ class ReindexerImpl {
 public:
 	using Completion = std::function<void(const Error &err)>;
 
-	ReindexerImpl(IClientsStats *clientsStats = nullptr);
-
+	ReindexerImpl();
 	~ReindexerImpl();
 
 	Error Connect(const string &dsn, ConnectOpts opts = ConnectOpts());
@@ -53,8 +50,6 @@ public:
 	Error TruncateNamespace(string_view nsName, const InternalRdxContext &ctx = InternalRdxContext());
 	Error RenameNamespace(string_view srcNsName, const std::string &dstNsName, const InternalRdxContext &ctx = InternalRdxContext());
 	Error AddIndex(string_view nsName, const IndexDef &index, const InternalRdxContext &ctx = InternalRdxContext());
-	Error SetSchema(string_view nsName, string_view schema, const InternalRdxContext &ctx = InternalRdxContext());
-	Error GetSchema(string_view nsName, string &schema, const InternalRdxContext &ctx = InternalRdxContext());
 	Error UpdateIndex(string_view nsName, const IndexDef &indexDef, const InternalRdxContext &ctx = InternalRdxContext());
 	Error DropIndex(string_view nsName, const IndexDef &index, const InternalRdxContext &ctx = InternalRdxContext());
 	Error EnumNamespaces(vector<NamespaceDef> &defs, EnumNamespacesOpts opts, const InternalRdxContext &ctx = InternalRdxContext());
@@ -77,8 +72,7 @@ public:
 	Error PutMeta(string_view nsName, const string &key, string_view data, const InternalRdxContext &ctx = InternalRdxContext());
 	Error EnumMeta(string_view nsName, vector<string> &keys, const InternalRdxContext &ctx = InternalRdxContext());
 	Error InitSystemNamespaces();
-	Error SubscribeUpdates(IUpdatesObserver *observer, const UpdatesFilters &filters, SubscriptionOpts opts);
-	Error UnsubscribeUpdates(IUpdatesObserver *observer);
+	Error SubscribeUpdates(IUpdatesObserver *observer, bool subscribe);
 	Error GetSqlSuggestions(const string_view sqlQuery, int pos, vector<string> &suggestions,
 							const InternalRdxContext &ctx = InternalRdxContext());
 	Error Status();
@@ -149,6 +143,8 @@ protected:
 	void prepareJoinResults(const Query &q, QueryResults &result);
 	static bool isPreResultValuesModeOptimizationAvailable(const Query &jItemQ, const NamespaceImpl::Ptr &jns);
 
+	void ensureDataLoaded(Namespace::Ptr &ns, const RdxContext &ctx);
+
 	void syncSystemNamespaces(string_view sysNsName, string_view filterNsName, const RdxContext &ctx);
 	void createSystemNamespaces();
 	void updateToSystemNamespace(string_view nsName, Item &, const RdxContext &ctx);
@@ -160,8 +156,6 @@ protected:
 
 	void backgroundRoutine();
 	Error closeNamespace(string_view nsName, const RdxContext &ctx, bool dropStorage, bool enableDropSlave = false);
-
-	Error forceSyncDownstream(string_view nsName, const InternalRdxContext &ctx = InternalRdxContext());
 
 	Namespace::Ptr getNamespace(string_view nsName, const RdxContext &ctx);
 	Namespace::Ptr getNamespaceNoThrow(string_view nsName, const RdxContext &ctx);
@@ -190,8 +184,6 @@ protected:
 	StorageType storageType_;
 	bool autorepairEnabled_;
 	std::atomic<bool> connected_;
-
-	IClientsStats *clientsStats_ = nullptr;
 
 	friend class Replicator;
 	friend class TransactionImpl;

@@ -12,7 +12,6 @@
 #include "estl/syncpool.h"
 #include "resultserializer.h"
 #include "tools/logger.h"
-#include "tools/semversion.h"
 #include "tools/stringstools.h"
 
 using namespace reindexer;
@@ -20,22 +19,14 @@ using std::move;
 const int kQueryResultsPoolSize = 1024;
 const int kMaxConcurentQueries = 65534;
 const size_t kCtxArrSize = 1024;
-const size_t kWarnLargeResultsLimit = 0x40000000;
-const size_t kMaxPooledResultsCap = 0x10000;
 
 static Error err_not_init(-1, "Reindexer db has not initialized");
-static Error err_too_many_queries(errLogic, "Too many parallel queries");
+static Error err_too_many_queries(errLogic, "Too many paralell queries");
 
 static reindexer_error error2c(const Error& err_) {
 	reindexer_error err;
 	err.code = err_.code();
-
-#ifdef _WIN32
-	err.what = err_.what().length() ? _strdup(err_.what().c_str()) : nullptr;
-#else
 	err.what = err_.what().length() ? strdup(err_.what().c_str()) : nullptr;
-#endif
-
 	return err;
 }
 
@@ -44,13 +35,7 @@ static reindexer_ret ret2c(const Error& err_, const reindexer_resbuffer& out) {
 	ret.err_code = err_.code();
 	if (ret.err_code) {
 		ret.out.results_ptr = 0;
-        
-#ifdef _WIN32
-		ret.out.data = uintptr_t(err_.what().length() ? _strdup(err_.what().c_str()) : nullptr);
-#else
 		ret.out.data = uintptr_t(err_.what().length() ? strdup(err_.what().c_str()) : nullptr);
-#endif
-
 	} else {
 		ret.out = out;
 	}
@@ -74,11 +59,7 @@ static CGOCtxPool ctx_pool(kCtxArrSize);
 
 static void put_results_to_pool(QueryResultsWrapper* res) {
 	res->Clear();
-	if (res->ser.Cap() > kMaxPooledResultsCap) {
-		res->ser = WrResultSerializer();
-	} else {
-		res->ser.Reset();
-	}
+	res->ser.Reset();
 	res_pool.put(res);
 }
 
@@ -381,15 +362,6 @@ reindexer_error reindexer_drop_index(uintptr_t rx, reindexer_string nsName, rein
 	return error2c(res);
 }
 
-reindexer_error reindexer_set_schema(uintptr_t rx, reindexer_string nsName, reindexer_string schemaJson, reindexer_ctx_info ctx_info) {
-	Error res = err_not_init;
-	if (rx) {
-		CGORdxCtxKeeper rdxKeeper(rx, ctx_info, ctx_pool);
-		res = rdxKeeper.db().SetSchema(str2cv(nsName), str2cv(schemaJson));
-	}
-	return error2c(res);
-}
-
 reindexer_error reindexer_enable_storage(uintptr_t rx, reindexer_string path, reindexer_ctx_info ctx_info) {
 	Error res = err_not_init;
 	if (rx) {
@@ -399,16 +371,7 @@ reindexer_error reindexer_enable_storage(uintptr_t rx, reindexer_string path, re
 	return error2c(res);
 }
 
-reindexer_error reindexer_connect(uintptr_t rx, reindexer_string dsn, ConnectOpts opts, reindexer_string client_vers) {
-	if (opts.options & kConnectOptWarnVersion) {
-		SemVersion cliVersion(str2cv(client_vers));
-		SemVersion libVersion(REINDEX_VERSION);
-		if (cliVersion != libVersion) {
-			std::cerr << "Warning: Used Reindexer client version: " << str2cv(client_vers) << " with library version: " << REINDEX_VERSION
-					  << ". It is strongly recommended to sync client & library versions" << std::endl;
-		}
-	}
-
+reindexer_error reindexer_connect(uintptr_t rx, reindexer_string dsn, ConnectOpts opts) {
 	Reindexer* db = reinterpret_cast<Reindexer*>(rx);
 	if (!db) return error2c(err_not_init);
 	Error err = db->Connect(str2c(dsn), opts);
@@ -437,10 +400,6 @@ reindexer_ret reindexer_select(uintptr_t rx, reindexer_string query, int as_json
 		res = rdxKeeper.db().Select(str2cv(query), *result);
 		if (res.ok()) {
 			results2c(result, &out, as_json, pt_versions, pt_versions_count);
-			if (result->ser.Cap() >= kWarnLargeResultsLimit) {
-				logPrintf(LogWarning, "Query too large results: count=%d size=%d,cap=%d, q=%s", result->Count(), result->ser.Len(),
-						  result->ser.Cap(), str2cv(query));
-			}
 		} else {
 			put_results_to_pool(result);
 		}
@@ -464,7 +423,7 @@ reindexer_ret reindexer_select_query(uintptr_t rx, struct reindexer_buffer in, i
 			q1.joinType = JoinType(ser.GetVarUint());
 			q1.Deserialize(ser);
 			q1.debugLevel = q.debugLevel;
-			if (q1.joinType == JoinType::MergeRX) {
+			if (q1.joinType == JoinType::Merge) {
 				q.mergeQueries_.emplace_back(std::move(q1));
 			} else {
 				q.joinQueries_.emplace_back(std::move(q1));
@@ -480,10 +439,6 @@ reindexer_ret reindexer_select_query(uintptr_t rx, struct reindexer_buffer in, i
 		if (res.ok()) {
 			results2c(result, &out, as_json, pt_versions, pt_versions_count);
 		} else {
-			if (result->ser.Cap() >= kWarnLargeResultsLimit) {
-				logPrintf(LogWarning, "Query too large results: count=%d size=%d,cap=%d, q=%s", result->Count(), result->ser.Len(),
-						  result->ser.Cap(), q.GetSQL());
-			}
 			put_results_to_pool(result);
 		}
 	}

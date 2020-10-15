@@ -11,7 +11,6 @@
 #include "client/namespace.h"
 #include "client/queryresults.h"
 #include "client/reindexerconfig.h"
-#include "client/transaction.h"
 #include "core/keyvalue/p_string.h"
 #include "core/namespacedef.h"
 #include "core/query/query.h"
@@ -36,14 +35,9 @@ class RPCClient {
 public:
 	typedef std::function<void(const Error &err)> Completion;
 	RPCClient(const ReindexerConfig &config);
-	RPCClient(const RPCClient &) = delete;
-	RPCClient(RPCClient &&) = delete;
-	RPCClient &operator=(const RPCClient &) = delete;
-	RPCClient &operator=(RPCClient &&) = delete;
 	~RPCClient();
 
 	Error Connect(const string &dsn, const client::ConnectOpts &opts);
-	Error Connect(const vector<pair<string, client::ConnectOpts>> &connectData);
 	Error Stop();
 
 	Error OpenNamespace(string_view nsName, const InternalRdxContext &ctx,
@@ -56,7 +50,6 @@ public:
 	Error AddIndex(string_view nsName, const IndexDef &index, const InternalRdxContext &ctx);
 	Error UpdateIndex(string_view nsName, const IndexDef &index, const InternalRdxContext &ctx);
 	Error DropIndex(string_view nsName, const IndexDef &index, const InternalRdxContext &ctx);
-	Error SetSchema(string_view nsName, string_view schema, const InternalRdxContext &ctx);
 	Error EnumNamespaces(vector<NamespaceDef> &defs, EnumNamespacesOpts opts, const InternalRdxContext &ctx);
 	Error EnumDatabases(vector<string> &dbList, const InternalRdxContext &ctx);
 	Error Insert(string_view nsName, client::Item &item, const InternalRdxContext &ctx);
@@ -76,23 +69,11 @@ public:
 	Error GetMeta(string_view nsName, const string &key, string &data, const InternalRdxContext &ctx);
 	Error PutMeta(string_view nsName, const string &key, const string_view &data, const InternalRdxContext &ctx);
 	Error EnumMeta(string_view nsName, vector<string> &keys, const InternalRdxContext &ctx);
-	Error SubscribeUpdates(IUpdatesObserver *observer, const UpdatesFilters &filters, SubscriptionOpts opts = SubscriptionOpts());
-	Error UnsubscribeUpdates(IUpdatesObserver *observer);
+	Error SubscribeUpdates(IUpdatesObserver *observer, bool subscribe);
 	Error GetSqlSuggestions(string_view query, int pos, std::vector<std::string> &suggests);
 	Error Status();
 
-	Transaction NewTransaction(string_view nsName, const InternalRdxContext &ctx);
-	Error CommitTransaction(Transaction &tr, const InternalRdxContext &ctx);
-	Error RollBackTransaction(Transaction &tr, const InternalRdxContext &ctx);
-
-protected:
-	struct worker {
-		worker() : running(false) {}
-		ev::dynamic_loop loop_;
-		std::thread thread_;
-		ev::async stop_;
-		atomic_bool running;
-	};
+private:
 	Error selectImpl(string_view query, QueryResults &result, cproto::ClientConnection *, seconds netTimeout,
 					 const InternalRdxContext &ctx);
 	Error selectImpl(const Query &query, QueryResults &result, cproto::ClientConnection *, seconds netTimeout,
@@ -100,13 +81,9 @@ protected:
 	Error modifyItem(string_view nsName, Item &item, int mode, seconds netTimeout, const InternalRdxContext &ctx);
 	Error modifyItemAsync(string_view nsName, Item *item, int mode, cproto::ClientConnection *, seconds netTimeout,
 						  const InternalRdxContext &ctx);
-	Error subscribeImpl(bool subscribe);
 	Namespace *getNamespace(string_view nsName);
-	Error startWorkers();
-	Error addConnectEntry(const string &dsn, const client::ConnectOpts &opts, size_t idx);
-	void run(int thIdx);
+	void run(int thIdx, const ConnectOpts &opts);
 	void onUpdates(net::cproto::RPCAnswer &ans, cproto::ClientConnection *conn);
-	bool onConnectionFail(int failedDsnIndex);
 
 	void checkSubscribes();
 
@@ -117,16 +94,21 @@ protected:
 	fast_hash_map<string, Namespace::Ptr, nocase_hash_str, nocase_equal_str> namespaces_;
 
 	shared_timed_mutex nsMutex_;
+	httpparser::UrlParser uri_;
+	struct worker {
+		worker() : running(false) {}
+		ev::dynamic_loop loop_;
+		std::thread thread_;
+		ev::async stop_;
+		atomic_bool running;
+	};
 	std::vector<worker> workers_;
 	std::atomic<unsigned> curConnIdx_;
 	ReindexerConfig config_;
 	UpdatesObservers observers_;
 	std::atomic<net::cproto::ClientConnection *> updatesConn_;
 	vector<net::cproto::RPCAnswer> delayedUpdates_;
-	cproto::ClientConnection::ConnectData connectData_;
 };
-
-void vec2pack(const h_vector<int32_t, 4> &vec, WrSerializer &ser);
 
 }  // namespace client
 }  // namespace reindexer

@@ -8,17 +8,18 @@ namespace reindexer {
 
 struct SelectCtx;
 class RdxContext;
-class JoinedSelector;
 
 class SelectIteratorContainer : public ExpressionTree<OpType, Bracket, 2, SelectIterator> {
-	using Base = ExpressionTree<OpType, Bracket, 2, SelectIterator>;
-
 public:
-	SelectIteratorContainer(PayloadType pt = PayloadType(), SelectCtx *ctx = nullptr) : pt_(pt), ctx_(ctx) {}
+	SelectIteratorContainer(PayloadType pt = PayloadType(), SelectCtx *ctx = nullptr) : pt_(pt), ctx_(ctx){};
 
 	void ForEachIterator(const std::function<void(const SelectIterator &)> &func) const { ExecuteAppropriateForEach(func); }
 	void ForEachIterator(const std::function<void(SelectIterator &)> &func) { ExecuteAppropriateForEach(func); }
 	const SelectIterator &operator[](size_t i) const {
+		assert(i < container_.size());
+		return container_[i].Value();
+	}
+	SelectIterator &operator[](size_t i) {
 		assert(i < container_.size());
 		return container_[i].Value();
 	}
@@ -36,11 +37,7 @@ public:
 	bool Process(PayloadValue &, bool *finish, IdType *rowId, IdType, bool match);
 
 	bool IsIterator(size_t i) const { return IsValue(i); }
-	void ExplainJSON(int iters, JsonBuilder &builder, const vector<JoinedSelector> *js) const {
-		explainJSON(cbegin(), cend(), iters, builder, js);
-	}
-
-	void Clear() { clear(); }
+	void ExplainJSON(int iters, JsonBuilder &builder) const { explainJSON(cbegin(), cend(), iters, builder); }
 
 private:
 	void sortByCost(span<unsigned> indexes, span<double> costs, unsigned from, unsigned to, int expectedIterations);
@@ -55,22 +52,22 @@ private:
 	template <bool reverse, bool hasComparators>
 	bool checkIfSatisfyAllConditions(iterator begin, iterator end, PayloadValue &, bool *finish, IdType rowId, IdType properRowId,
 									 bool match);
-	static void explainJSON(const_iterator it, const_iterator to, int iters, JsonBuilder &builder, const vector<JoinedSelector> *);
+	static void explainJSON(const_iterator it, const_iterator to, int iters, JsonBuilder &builder);
 	template <bool reverse>
 	static IdType next(const_iterator, IdType from);
 	template <bool reverse>
 	static IdType getNextItemId(const_iterator begin, const_iterator end, IdType from);
 	static bool isIdset(const_iterator it, const_iterator end);
 
-	SelectKeyResults processQueryEntry(const QueryEntry &qe, const NamespaceImpl &ns, StrictMode strictMode);
+	SelectKeyResults processQueryEntry(const QueryEntry &qe, const NamespaceImpl &ns);
 	SelectKeyResults processQueryEntry(const QueryEntry &qe, bool enableSortIndexOptimize, const NamespaceImpl &ns, unsigned sortId,
 									   bool isQueryFt, SelectFunction::Ptr selectFnc, bool &isIndexFt, bool &isIndexSparse, FtCtx::Ptr &,
 									   const RdxContext &);
 	void processJoinEntry(const QueryEntry &qe, OpType op);
 	void processQueryEntryResults(SelectKeyResults &selectResults, OpType, const NamespaceImpl &ns, const QueryEntry &qe, bool isIndexFt,
 								  bool isIndexSparse, bool nonIndexField);
-	void processEqualPositions(const std::multimap<unsigned, EqualPosition> &equalPositions, size_t begin, size_t end,
-							   const NamespaceImpl &ns, const QueryEntries &queries);
+	void processEqualPositions(const std::multimap<unsigned, EqualPosition> &equalPositions, size_t begin, size_t end, const NamespaceImpl &ns,
+							   const QueryEntries &queries);
 	bool processJoins(SelectIterator &it, const ConstPayload &pl, IdType properRowId, bool match);
 
 	/// @return end() if empty or last opened bracket is empty
@@ -78,8 +75,8 @@ private:
 		typename Container::iterator it = this->container_.begin(), end = this->container_.end();
 		if (!this->activeBrackets_.empty()) it += (this->activeBrackets_.back() + 1);
 		if (it == end) return this->end();
-		iterator i = it, i2 = it, e = end;
-		while (++i2 != e) i = i2;
+		iterator i = it, e = end;
+		while (i + 1 != e) ++i;
 		return i;
 	}
 

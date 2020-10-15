@@ -4,7 +4,6 @@
 #include "client/item.h"
 #include "client/queryresults.h"
 #include "client/reindexerconfig.h"
-#include "client/transaction.h"
 #include "core/namespacedef.h"
 #include "core/query/query.h"
 
@@ -12,7 +11,6 @@
 
 namespace reindexer {
 class IUpdatesObserver;
-class UpdatesFilters;
 
 namespace client {
 using std::vector;
@@ -39,16 +37,12 @@ public:
 	~Reindexer();
 	Reindexer(const Reindexer &) = delete;
 	Reindexer(Reindexer &&) noexcept;
-	Reindexer &operator=(const Reindexer &) = delete;
-	Reindexer &operator=(Reindexer &&) noexcept;
 
 	/// Connect - connect to reindexer server
 	/// @param dsn - uri of server and database, like: `cproto://user@password:127.0.0.1:6534/dbname`
 	/// @param opts - Connect options. May contaion any of <br>
+	/// ConnectOpts::OpenNamespaces() - true: Need to open all the namespaces; false: Don't open namespaces
 	Error Connect(const string &dsn, const client::ConnectOpts &opts = client::ConnectOpts());
-	/// Connect - connect to reindexer server
-	/// @param connectData - list of server dsn + it's ConnectOpts
-	Error Connect(const vector<pair<string, client::ConnectOpts>> &connectData);
 	/// Stop - shutdown connector
 	Error Stop();
 	/// Open or create namespace
@@ -86,10 +80,6 @@ public:
 	/// @param nsName - Name of namespace
 	/// @param index - index name
 	Error DropIndex(string_view nsName, const IndexDef &index);
-	/// Set fields schema for namespace
-	/// @param nsName - Name of namespace
-	/// @param schema - JSON in JsonSchema format
-	Error SetSchema(string_view nsName, string_view schema);
 	/// Get list of all available namespaces
 	/// @param defs - std::vector of NamespaceDef of available namespaves
 	/// @param opts - Enumerartion options
@@ -160,13 +150,8 @@ public:
 	Error EnumMeta(string_view nsName, vector<string> &keys);
 	/// Subscribe to updates of database
 	/// @param observer - Observer interface, which will receive updates
-	/// @param filters - Subscription filters set
-	/// @param opts - Subscription options (allows to either add new filters or reset them)
-	Error SubscribeUpdates(IUpdatesObserver *observer, const UpdatesFilters &filters, SubscriptionOpts opts = SubscriptionOpts());
-	/// Unsubscribe from updates of database
-	/// Cancelation context doesn't affect this call
-	/// @param observer - Observer interface, which will be unsubscribed updates
-	Error UnsubscribeUpdates(IUpdatesObserver *observer);
+	/// @param subscribe - true: subscribe, false: unsubscribe
+	Error SubscribeUpdates(IUpdatesObserver *observer, bool subscribe);
 	/// Get possible suggestions for token (set by 'pos') in Sql query.
 	/// @param sqlQuery - sql query.
 	/// @param pos - position in sql query for suggestions.
@@ -174,15 +159,6 @@ public:
 	Error GetSqlSuggestions(const string_view sqlQuery, int pos, vector<string> &suggestions);
 	/// Get curret connection status
 	Error Status();
-	/// Allocate new transaction for namespace
-	/// @param nsName - Name of namespace
-	Transaction NewTransaction(string_view nsName);
-	/// Commit transaction - transaction will be deleted after commit
-	/// @param tr - transaction to commit
-	Error CommitTransaction(Transaction &tr);
-	/// RollBack transaction - transaction will be deleted after rollback
-	/// @param tr - transaction to rollback
-	Error RollBackTransaction(Transaction &tr);
 
 	/// Add cancelable context
 	/// @param cancelCtx - context pointer
@@ -200,6 +176,7 @@ public:
 
 private:
 	Reindexer(RPCClient *impl, InternalRdxContext &&ctx) : impl_(impl), owner_(false), ctx_(std::move(ctx)) {}
+
 	RPCClient *impl_;
 	bool owner_;
 	InternalRdxContext ctx_;

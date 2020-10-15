@@ -11,17 +11,12 @@ namespace reindexer {
 using std::string;
 
 // Format: see fulltext.md
-bool is_term(int ch, const string &extraWordSymbols) {
-	return IsAlpha(ch) || IsDigit(ch) ||
-		   extraWordSymbols.find(ch) != string::npos
-		   // wrong kb layout
-		   || ch == '[' || ch == ';' || ch == ',' || ch == '.';
-}
 
-bool is_dslbegin(int ch, const string &extraWordSymbols) {
-	return is_term(ch, extraWordSymbols) || ch == '+' || ch == '-' || ch == '*' || ch == '\'' || ch == '\"' || ch == '@' || ch == '=' ||
+bool is_dslbegin(int ch) {
+	return IsAlpha(ch) || IsDigit(ch) || ch == '+' || ch == '-' || ch == '*' || ch == '\'' || ch == '\"' || ch == '@' || ch == '=' ||
 		   ch == '\\';
 }
+bool is_term(int ch, const string &extraWordSymbols) { return IsAlpha(ch) || IsDigit(ch) || extraWordSymbols.find(ch) != string::npos; }
 
 void FtDSLQuery::parse(const string &q) {
 	wstring utf16str;
@@ -36,10 +31,7 @@ void FtDSLQuery::parse(wstring &utf16str) {
 	fieldsBoost.insert(fieldsBoost.end(), std::max(int(fields_.size()), 1), 1.0);
 
 	for (auto it = utf16str.begin(); it != utf16str.end();) {
-		if (!is_dslbegin(*it, extraWordSymbols_)) {
-			++it;
-			continue;
-		}
+		while (it != utf16str.end() && !is_dslbegin(*it)) it++;
 
 		FtDSLEntry fte;
 		fte.opts.fieldsBoost = fieldsBoost;
@@ -68,11 +60,7 @@ void FtDSLQuery::parse(wstring &utf16str) {
 				if (!ingroup) {
 					int distance = 1;
 					if (it != utf16str.end() && *it == '~') {
-						++it;
-						if (it == utf16str.end()) {
-							throw Error(errParseDSL, "Expected digit after '~' operator in phrase, but found nothing");
-						}
-						wchar_t *end = nullptr, *start = &*it;
+						wchar_t *end = nullptr, *start = &*++it;
 						distance = wcstod(start, &end);
 						it += end - start;
 						if (end == start)
@@ -102,7 +90,7 @@ void FtDSLQuery::parse(wstring &utf16str) {
 		while (it != utf16str.end() && (isSlash || is_term(*it, extraWordSymbols_))) {
 			*it = ToLower(*it);
 			check_for_replacement(*it);
-			isSlash = (++it != utf16str.end() && *it == '\\');
+			isSlash = (*(++it) == '\\');
 			if (isSlash) {
 				std::move(it + 1, utf16str.end(), it);
 				utf16str.pop_back();
@@ -115,11 +103,7 @@ void FtDSLQuery::parse(wstring &utf16str) {
 			} else if (*it == '~') {
 				fte.opts.typos = true;
 			} else if (*it == '^') {
-				++it;
-				if (it == utf16str.end()) {
-					throw Error(errParseDSL, "Expected digit after '^' operator in search query DSL, but found nothing");
-				}
-				wchar_t *end = nullptr, *start = &*it;
+				wchar_t *end = nullptr, *start = &*++it;
 				fte.opts.boost = wcstod(start, &end);
 				it += end - start - 1;
 				if (end == start)
@@ -153,7 +137,7 @@ void FtDSLQuery::parse(wstring &utf16str) {
 		e.opts.termLenBoost = float(e.pattern.length()) / maxPatternLen;
 		e.opts.qpos = cnt++;
 	}
-}
+}  // namespace reindexer
 
 void FtDSLQuery::parseFields(wstring &utf16str, wstring::iterator &it, h_vector<float, 8> &fieldsBoost) {
 	float defFieldBoost = 0.0;
@@ -161,19 +145,14 @@ void FtDSLQuery::parseFields(wstring &utf16str, wstring::iterator &it, h_vector<
 
 	while (it != utf16str.end()) {
 		while (it != utf16str.end() && !(IsAlpha(*it) || IsDigit(*it) || *it == '*' || *it == '_')) it++;
-		if (it == utf16str.end()) break;
 
 		auto begIt = it;
-		while (it != utf16str.end() && (IsAlpha(*it) || IsDigit(*it) || *it == '*' || *it == '_' || *it == '.')) it++;
+		while (it != utf16str.end() && (IsAlpha(*it) || IsDigit(*it) || *it == '*' || *it == '_')) it++;
 		auto endIt = it;
 
 		float boost = 1.0;
 		if (it != utf16str.end() && *it == '^') {
-			++it;
-			if (it == utf16str.end()) {
-				throw Error(errParseDSL, "Expected digit after '^' operator in search query DSL, but found nothing");
-			}
-			wchar_t *end = nullptr, *start = &*it;
+			wchar_t *end = nullptr, *start = &*++it;
 			boost = wcstod(start, &end);
 			it += end - start;
 			if (end == start)

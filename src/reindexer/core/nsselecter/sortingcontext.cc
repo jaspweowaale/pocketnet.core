@@ -16,7 +16,10 @@ int SortingContext::sortId() const {
 	return sortIdx ? sortIdx->SortId() : 0;
 }
 
-bool SortingContext::isIndexOrdered() const { return (!entries.empty() && entries[0].index && entries[0].index->IsOrdered()); }
+bool SortingContext::isIndexOrdered() const {
+	if (entries.empty()) return false;
+	return (!entries.empty() && entries[0].index && entries[0].index->IsOrdered());
+}
 
 bool SortingContext::isOptimizationEnabled() const { return (uncommitedIndex >= 0) && sortIndex(); }
 
@@ -30,8 +33,8 @@ void SortingContext::resetOptimization() {
 	if (!entries.empty()) entries[0].index = nullptr;
 }
 
-SortingOptions::SortingOptions(const SortingContext &sortingContext)
-	: forcedMode{sortingContext.forcedMode},
+SortingOptions::SortingOptions(const Query &q, const SortingContext &sortingContext)
+	: forcedMode{!q.forcedSortOrder_.empty()},
 	  multiColumn{sortingContext.entries.size() > 1},
 	  haveExpression{!sortingContext.expressions.empty()} {
 	if (sortingContext.entries.empty()) {

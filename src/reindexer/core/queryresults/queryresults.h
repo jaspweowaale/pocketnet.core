@@ -14,12 +14,10 @@ using std::string;
 class TagsMatcher;
 class PayloadType;
 class WrSerializer;
-struct ResultFetchOpts;
 
 namespace joins {
 class NamespaceResults;
-class ItemIterator;
-}  // namespace joins
+}
 
 /// QueryResults is an interface for iterating over documents, returned by Query from Reindexer.<br>
 /// *Lifetime*: QueryResults uses Copy-On-Write semantics, so it has independent lifetime and state - e.g., acquired from Reindexer.
@@ -38,7 +36,7 @@ public:
 	QueryResults &operator=(QueryResults &&obj) noexcept;
 	void Add(const ItemRef &i);
 	void Add(const ItemRef &itemref, const PayloadType &pt);
-	void AddItem(Item &item, bool withData = false, bool singleValue = true);
+	void AddItem(Item &item, bool withData = false);
 	void Dump() const;
 	void Erase(ItemRefVector::iterator begin, ItemRefVector::iterator end);
 	size_t Count() const { return items_.size(); }
@@ -53,9 +51,7 @@ public:
 	public:
 		Error GetJSON(WrSerializer &wrser, bool withHdrLen = true);
 		Error GetCJSON(WrSerializer &wrser, bool withHdrLen = true);
-		Error GetMsgPack(WrSerializer &wrser, bool withHdrLen = true);
 		Item GetItem();
-		joins::ItemIterator GetJoined();
 		const ItemRef &GetItemRef() const { return qr_->items_[idx_]; }
 		int64_t GetLSN() const { return qr_->items_[idx_].Value().GetLSN(); }
 		bool IsRaw() const;
@@ -79,9 +75,8 @@ public:
 	std::vector<joins::NamespaceResults> joined_;
 	vector<AggregationResult> aggregationResults;
 	int totalCount = 0;
-	bool haveRank = false;
+	bool haveProcent = false;
 	bool nonCacheableData = false;
-	bool needOutputRank = false;
 
 	struct Context;
 	// precalc context size
@@ -110,7 +105,6 @@ public:
 
 protected:
 	class EncoderDatasourceWithJoins;
-	class EncoderAdditionalDatasource;
 
 private:
 	void lockResults(bool lock);

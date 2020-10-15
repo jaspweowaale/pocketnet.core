@@ -1,7 +1,6 @@
 
 #include "sqlsuggester.h"
 #include "core/namespacedef.h"
-#include "core/schema.h"
 #include "sqltokentype.h"
 
 #include <set>
@@ -13,11 +12,10 @@ bool checkIfTokenStartsWith(const string_view &src, const string_view &pattern) 
 	return checkIfStartsWith(src, pattern) && src.length() < pattern.length();
 }
 
-vector<string> SQLSuggester::GetSuggestions(string_view q, size_t pos, EnumNamespacesF enumNamespaces, GetSchemaF getSchema) {
+vector<string> SQLSuggester::GetSuggestions(const string_view &q, size_t pos, EnumNamespacesF enumNamespaces) {
 	ctx_.suggestionsPos = pos;
 	ctx_.autocompleteMode = true;
-	enumNamespaces_ = std::move(enumNamespaces);
-	getSchema_ = std::move(getSchema);
+	enumNamespaces_ = enumNamespaces;
 
 	try {
 		Parse(q);
@@ -28,26 +26,21 @@ vector<string> SQLSuggester::GetSuggestions(string_view q, size_t pos, EnumNames
 		checkForTokenSuggestions(item);
 	}
 
-	for (auto &it : ctx_.suggestions) {
-		if (!it.variants.empty()) {
-			return it.variants;
-		}
-	}
+	if (ctx_.suggestions.size() > 0) return ctx_.suggestions.front().variants;
 	return std::vector<string>();
 }
 
 std::unordered_map<int, std::set<string>> sqlTokenMatchings = {
 	{Start, {"explain", "select", "delete", "update", "truncate"}},
 	{StartAfterExplain, {"select", "delete", "update"}},
-	{AggregationSqlToken, {"sum", "avg", "max", "min", "facet", "count", "distinct", "rank"}},
+	{AggregationSqlToken, {"sum", "avg", "max", "min", "facet", "count", "distinct"}},
 	{SelectConditionsStart, {"where", "limit", "offset", "order", "join", "left", "inner", "equal_position", "merge", "or", ";"}},
 	{ConditionSqlToken, {">", ">=", "<", "<=", "<>", "in", "range", "is", "==", "="}},
 	{WhereFieldValueSqlToken, {"null", "empty", "not"}},
 	{WhereFieldNegateValueSqlToken, {"null", "empty"}},
 	{OpSqlToken, {"and", "or"}},
-	{WhereOpSqlToken, {"and", "or", "order", "equal_position"}},
+	{WhereOpSqlToken, {"and", "or", "order"}},
 	{SortDirectionSqlToken, {"asc", "desc"}},
-	{JoinTypesSqlToken, {"join", "left", "inner"}},
 	{LeftSqlToken, {"join"}},
 	{InnerSqlToken, {"join"}},
 	{SelectSqlToken, {"select"}},
@@ -60,16 +53,13 @@ std::unordered_map<int, std::set<string>> sqlTokenMatchings = {
 	{WhereSqlToken, {"where"}},
 	{AllFieldsToken, {"*"}},
 	{DeleteConditionsStart, {"where", "limit", "offset", "order"}},
-	{UpdateOptionsSqlToken, {"set", "drop"}},
-	{EqualPositionSqlToken, {"equal_position"}},
+	{UpdateOptions, {"set", "drop"}},
 };
 
-static void getMatchingTokens(int tokenType, const string &token, vector<string> &variants) {
+void getMatchingTokens(int tokenType, const string &token, vector<string> &variants) {
 	const std::set<string> &suggestions = sqlTokenMatchings[tokenType];
 	for (auto it = suggestions.begin(); it != suggestions.end(); ++it) {
-		if (isBlank(token) || checkIfStartsWith(token, *it)) {
-			variants.push_back(*it);
-		}
+		if (isBlank(token) || checkIfStartsWith(token, *it)) variants.push_back(*it);
 	}
 }
 
@@ -80,32 +70,13 @@ void SQLSuggester::getMatchingNamespacesNames(const string &token, vector<string
 	}
 }
 
-void SQLSuggester::getMatchingFieldsNames(const string &token, vector<string> &variants) {
+void SQLSuggester::getMatchingIndexesNames(const string &token, vector<string> &variants) {
 	auto namespaces = enumNamespaces_(EnumNamespacesOpts().WithFilter(ctx_.suggestionLinkedNs));
 
 	if (namespaces.empty()) return;
-	auto dotPos = token.find('.');
 	for (auto &idx : namespaces[0].indexes) {
 		if (idx.name_ == "#pk" || idx.name_ == "-tuple") continue;
-		if (isBlank(token) || checkIfStartsWith(token, idx.name_, dotPos != string::npos)) {
-			if (dotPos == string::npos) {
-				variants.push_back(idx.name_);
-			} else {
-				variants.push_back(idx.name_.substr(dotPos));
-			}
-		}
-	}
-
-	if (getSchema_) {
-		auto schema = getSchema_(namespaces[0].name);
-		if (schema) {
-			auto fieldsSuggestions = schema->GetSuggestions(token);
-			for (auto &suggestion : fieldsSuggestions) {
-				if (std::find(variants.begin(), variants.end(), suggestion) == variants.end()) {
-					variants.emplace_back(std::move(suggestion));
-				}
-			}
-		}
+		if (isBlank(token) || checkIfStartsWith(token, idx.name_)) variants.push_back(idx.name_);
 	}
 }
 
@@ -128,18 +99,18 @@ void SQLSuggester::getSuggestionsForToken(SqlParsingCtx::SuggestionData &ctx) {
 		case BySqlToken:
 		case SetSqlToken:
 		case WhereSqlToken:
-		case UpdateOptionsSqlToken:
+		case UpdateOptions:
 			getMatchingTokens(ctx.tokenType, ctx.token, ctx.variants);
 			break;
 		case SingleSelectFieldSqlToken:
 			getMatchingTokens(AllFieldsToken, ctx.token, ctx.variants);
 			getMatchingTokens(AggregationSqlToken, ctx.token, ctx.variants);
-			getMatchingFieldsNames(ctx.token, ctx.variants);
+			getMatchingIndexesNames(ctx.token, ctx.variants);
 			break;
 		case SelectFieldsListSqlToken:
 			getMatchingTokens(FromSqlToken, ctx.token, ctx.variants);
 			getMatchingTokens(AggregationSqlToken, ctx.token, ctx.variants);
-			getMatchingFieldsNames(ctx.token, ctx.variants);
+			getMatchingIndexesNames(ctx.token, ctx.variants);
 			break;
 		case NamespaceSqlToken:
 			getMatchingNamespacesNames(ctx.token, ctx.variants);
@@ -147,12 +118,10 @@ void SQLSuggester::getSuggestionsForToken(SqlParsingCtx::SuggestionData &ctx) {
 		case AndSqlToken:
 		case WhereFieldSqlToken:
 			getMatchingTokens(NotSqlToken, ctx.token, ctx.variants);
-			getMatchingFieldsNames(ctx.token, ctx.variants);
-			getMatchingTokens(EqualPositionSqlToken, ctx.token, ctx.variants);
-			getMatchingTokens(JoinTypesSqlToken, ctx.token, ctx.variants);
+			getMatchingIndexesNames(ctx.token, ctx.variants);
 			break;
 		case FieldNameSqlToken:
-			getMatchingFieldsNames(ctx.token, ctx.variants);
+			getMatchingIndexesNames(ctx.token, ctx.variants);
 			break;
 		case SortDirectionSqlToken:
 			getMatchingTokens(SortDirectionSqlToken, ctx.token, ctx.variants);
@@ -160,7 +129,7 @@ void SQLSuggester::getSuggestionsForToken(SqlParsingCtx::SuggestionData &ctx) {
 			break;
 		case JoinedFieldNameSqlToken:
 			getMatchingNamespacesNames(ctx.token, ctx.variants);
-			getMatchingFieldsNames(ctx.token, ctx.variants);
+			getMatchingIndexesNames(ctx.token, ctx.variants);
 			break;
 		default:
 			break;
@@ -172,19 +141,12 @@ bool SQLSuggester::findInPossibleTokens(int type, const string &v) {
 	return (values.find(v) != values.end());
 }
 
-bool SQLSuggester::findInPossibleFields(const string &tok) {
+bool SQLSuggester::findInPossibleIndexes(const string &tok) {
 	auto namespaces = enumNamespaces_(EnumNamespacesOpts().WithFilter(ctx_.suggestionLinkedNs));
 
 	if (namespaces.empty()) return false;
-	if (std::find_if(namespaces[0].indexes.begin(), namespaces[0].indexes.end(), [&](const IndexDef &lhs) { return lhs.name_ == tok; }) !=
-		namespaces[0].indexes.end()) {
-		return true;
-	}
-	if (getSchema_) {
-		auto schema = getSchema_(namespaces[0].name);
-		return schema && schema->HasPath(tok);
-	}
-	return false;
+	return std::find_if(namespaces[0].indexes.begin(), namespaces[0].indexes.end(),
+						[&](const IndexDef &lhs) { return lhs.name_ == tok; }) != namespaces[0].indexes.end();
 }
 
 bool SQLSuggester::findInPossibleNamespaces(const string &tok) {
@@ -206,7 +168,7 @@ void SQLSuggester::checkForTokenSuggestions(SqlParsingCtx::SuggestionData &data)
 			}
 			if (data.token == "*") break;
 			bool isIndex = false, isAggregationFunction = false;
-			isIndex = findInPossibleFields(data.token);
+			isIndex = findInPossibleIndexes(data.token);
 			if (!isIndex) isAggregationFunction = findInPossibleTokens(AggregationSqlToken, data.token);
 			if (!isIndex && !isAggregationFunction) {
 				getSuggestionsForToken(data);
@@ -231,7 +193,7 @@ void SQLSuggester::checkForTokenSuggestions(SqlParsingCtx::SuggestionData &data)
 				}
 			}
 
-			if (!fromKeywordReached && !findInPossibleFields(data.token)) {
+			if (!fromKeywordReached && !findInPossibleIndexes(data.token)) {
 				getSuggestionsForToken(data);
 			}
 		} break;
@@ -257,7 +219,7 @@ void SQLSuggester::checkForTokenSuggestions(SqlParsingCtx::SuggestionData &data)
 				break;
 			}
 			if (iequals(data.token, "not")) break;
-			if (!findInPossibleFields(data.token)) {
+			if (!findInPossibleIndexes(data.token)) {
 				getSuggestionsForToken(data);
 			}
 			break;
@@ -311,8 +273,7 @@ void SQLSuggester::checkForTokenSuggestions(SqlParsingCtx::SuggestionData &data)
 			}
 			if ((data.tokenType == WhereOpSqlToken) && (ctx_.tokens.size() > 1)) {
 				int prevTokenType = ctx_.tokens.back();
-				if ((prevTokenType != WhereSqlToken) &&
-					(checkIfTokenStartsWith(data.token, "order") || checkIfTokenStartsWith(data.token, "equal_position"))) {
+				if ((prevTokenType != WhereSqlToken) && checkIfTokenStartsWith(data.token, "order")) {
 					getSuggestionsForToken(data);
 					break;
 				}
@@ -323,11 +284,14 @@ void SQLSuggester::checkForTokenSuggestions(SqlParsingCtx::SuggestionData &data)
 				getSuggestionsForToken(data);
 				break;
 			}
-			if (findInPossibleFields(data.token)) break;
+			if (findInPossibleIndexes(data.token)) break;
+			if (checkIfTokenStartsWith(data.token, "not")) {
+				getSuggestionsForToken(data);
+			}
 			getSuggestionsForToken(data);
 			break;
 		case FieldNameSqlToken:
-			if (isBlank(data.token) || !findInPossibleFields(data.token)) {
+			if (isBlank(data.token) || !findInPossibleIndexes(data.token)) {
 				getSuggestionsForToken(data);
 			}
 			break;
@@ -347,7 +311,7 @@ void SQLSuggester::checkForTokenSuggestions(SqlParsingCtx::SuggestionData &data)
 			}
 			break;
 		case JoinedFieldNameSqlToken:
-			if (isBlank(data.token) || !findInPossibleFields(data.token) || !findInPossibleNamespaces(data.token)) {
+			if (isBlank(data.token) || !findInPossibleIndexes(data.token) || !findInPossibleNamespaces(data.token)) {
 				getSuggestionsForToken(data);
 				break;
 			}
@@ -359,14 +323,12 @@ void SQLSuggester::checkForTokenSuggestions(SqlParsingCtx::SuggestionData &data)
 		case BySqlToken:
 		case SetSqlToken:
 		case WhereSqlToken:
-		case UpdateOptionsSqlToken:
 			if (isBlank(data.token) || !findInPossibleTokens(data.tokenType, data.token)) {
 				getSuggestionsForToken(data);
 				break;
 			}
 			break;
 		default:
-			getSuggestionsForToken(data);
 			break;
 	}
 }

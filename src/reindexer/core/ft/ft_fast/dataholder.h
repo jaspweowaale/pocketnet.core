@@ -2,7 +2,7 @@
 #include <memory>
 #include <unordered_map>
 #include "core/ft/config/ftfastconfig.h"
-#include "core/ft/filters/itokenfilter.h"
+#include "core/ft/ft_fuzzy/searchers/isearcher.h"
 #include "core/ft/idrelset.h"
 #include "core/ft/stemmer.h"
 #include "core/index/indextext/ftkeyentry.h"
@@ -18,8 +18,6 @@ using std::vector;
 using std::pair;
 using std::unordered_map;
 using std::vector;
-
-// #define REINDEX_FT_EXTRA_DEBUG 1
 
 struct VDocEntry {
 #ifdef REINDEX_FT_EXTRA_DEBUG
@@ -102,9 +100,7 @@ public:
 	unordered_map<string, stemmer> stemmers_;
 	ProcessStatus status_;
 
-	ITokenFilter::Ptr translit_;
-	ITokenFilter::Ptr kbLayout_;
-	ITokenFilter::Ptr synonyms_;
+	vector<search_engine::ISeacher::Ptr> searchers_;
 
 	vector<VDocEntry> vdocs_;
 	vector<unique_ptr<string>> bufStrs_;

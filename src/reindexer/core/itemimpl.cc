@@ -4,8 +4,6 @@
 #include "core/cjson/cjsonmodifier.h"
 #include "core/cjson/cjsontools.h"
 #include "core/cjson/jsondecoder.h"
-#include "core/cjson/msgpackbuilder.h"
-#include "core/cjson/msgpackdecoder.h"
 #include "core/keyvalue/p_string.h"
 #include "tools/logger.h"
 
@@ -78,13 +76,10 @@ void ItemImpl::ModifyField(string_view jsonPath, const VariantArray &keys, Field
 	CJsonModifier cjsonModifier(tagsMatcher_, payloadType_);
 	switch (mode) {
 		case FieldModeSet:
-			err = cjsonModifier.SetFieldValue(cjson, tagsMatcher_.path2tag(jsonPath, true), keys, ser_);
-			break;
-		case FieldModeSetJson:
-			err = cjsonModifier.SetObject(cjson, tagsMatcher_.path2tag(jsonPath, true), keys, ser_, &pl);
+			err = cjsonModifier.SetFieldValue(cjson, tagsMatcher_.path2tag(jsonPath), keys, ser_);
 			break;
 		case FieldModeDrop:
-			err = cjsonModifier.RemoveField(cjson, tagsMatcher_.path2tag(jsonPath), ser_);
+			err = cjsonModifier.RemoveFieldValue(cjson, tagsMatcher_.path2tag(jsonPath), ser_);
 			break;
 		default:
 			std::abort();
@@ -98,32 +93,6 @@ void ItemImpl::ModifyField(string_view jsonPath, const VariantArray &keys, Field
 void ItemImpl::SetField(string_view jsonPath, const VariantArray &keys) { ModifyField(jsonPath, keys, FieldModeSet); }
 void ItemImpl::DropField(string_view jsonPath) { ModifyField(jsonPath, {}, FieldModeDrop); }
 Variant ItemImpl::GetField(int field) { return GetPayload().Get(field, 0); }
-
-Error ItemImpl::FromMsgPack(string_view buf, size_t &offset) {
-	Payload pl = GetPayload();
-	MsgPackDecoder decoder(&tagsMatcher_);
-
-	ser_.Reset();
-	ser_.PutUInt32(0);
-	Error err = decoder.Decode(buf, &pl, ser_, offset);
-	if (err.ok()) {
-		tupleData_ = ser_.DetachBuf();
-		pl.Set(0, {Variant(p_string(reinterpret_cast<l_string_hdr *>(tupleData_.get())))});
-	}
-	return err;
-}
-
-Error ItemImpl::GetMsgPack(WrSerializer &wrser) {
-	int startTag = 0;
-	ConstPayload pl = GetConstPayload();
-
-	MsgPackEncoder msgpackEncoder(&tagsMatcher_);
-	const TagsLengths &tagsLengths = msgpackEncoder.GetTagsMeasures(&pl);
-
-	MsgPackBuilder msgpackBuilder(wrser, &tagsLengths, &startTag, ObjType::TypePlain, &tagsMatcher_);
-	msgpackEncoder.Encode(&pl, msgpackBuilder);
-	return errOK;
-}
 
 // Construct item from compressed json
 Error ItemImpl::FromCJSON(const string_view &slice, bool pkOnly) {
@@ -168,38 +137,24 @@ Error ItemImpl::FromCJSON(const string_view &slice, bool pkOnly) {
 	return err;
 }
 
-Error ItemImpl::FromJSON(string_view slice, char **endp, bool pkOnly) {
+Error ItemImpl::FromJSON(const string_view &slice, char **endp, bool pkOnly) {
 	string_view data = slice;
 	cjson_ = string_view();
 
-	if (!unsafe_) {
-		if (endp) {
-			size_t len = 0;
-			try {
-				gason::JsonParser parser;
-				parser.Parse(data, &len);
-				*endp = const_cast<char *>(data.data()) + len;
-				sourceData_.reset(new char[len]);
-				std::copy(data.begin(), data.begin() + len, sourceData_.get());
-				data = string_view(sourceData_.get(), len);
-			} catch (const gason::Exception &e) {
-				return Error(errParseJson, "Error parsing json: '%s'", e.what());
-			}
-		} else {
-			sourceData_.reset(new char[slice.size()]);
-			std::copy(data.begin(), data.end(), sourceData_.get());
-			data = string_view(sourceData_.get(), data.size());
-		}
+	if (!unsafe_ && endp == nullptr) {
+		sourceData_.reset(new char[slice.size()]);
+		std::copy(data.begin(), data.end(), sourceData_.get());
+		data = string_view(sourceData_.get(), data.size());
 	}
 
 	payloadValue_.Clone();
+	char *endptr = nullptr;
 	gason::JsonValue value;
 	gason::JsonAllocator allocator;
-	char *endptr = nullptr;
-	int status = jsonParse(data, &endptr, &value, allocator);
+	int status = jsonParse(giftStr(data), &endptr, &value, allocator);
 	if (status != gason::JSON_OK) return Error(errParseJson, "Error parsing json: '%s'", gason::jsonStrError(status));
 	if (value.getTag() != gason::JSON_OBJECT) return Error(errParseJson, "Expected json object");
-	if (unsafe_ && endp) {
+	if (endp) {
 		*endp = endptr;
 	}
 
@@ -227,7 +182,7 @@ string_view ItemImpl::GetJSON() {
 	ConstPayload pl(payloadType_, payloadValue_);
 
 	JsonEncoder encoder(&tagsMatcher_);
-	JsonBuilder builder(ser_, ObjType::TypePlain);
+	JsonBuilder builder(ser_, JsonBuilder::TypePlain);
 
 	ser_.Reset();
 	encoder.Encode(&pl, builder);
@@ -253,7 +208,7 @@ string_view ItemImpl::GetCJSON(WrSerializer &ser, bool withTagsMatcher) {
 
 	ConstPayload pl(payloadType_, payloadValue_);
 
-	CJsonBuilder builder(ser, ObjType::TypePlain);
+	CJsonBuilder builder(ser, CJsonBuilder::TypePlain);
 	CJsonEncoder encoder(&tagsMatcher_);
 
 	if (withTagsMatcher) {

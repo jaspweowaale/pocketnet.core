@@ -8,7 +8,7 @@
 
 namespace reindexer {
 
-bool QueryEntry::operator==(const QueryEntry &obj) const noexcept {
+bool QueryEntry::operator==(const QueryEntry &obj) const {
 	if (condition != obj.condition) return false;
 	if (index != obj.index) return false;
 	if (idxNo != obj.idxNo) return false;
@@ -23,9 +23,9 @@ EqualPosition QueryEntries::DetermineEqualPositionIndexes(unsigned start, const 
 	if (fields.size() < 2) throw Error(errLogic, "Amount of fields with equal index position should be 2 or more!");
 	EqualPosition result;
 	for (size_t i = start; i < Size(); ++i) {
-		if (!IsValue(i)) continue;
+		if (container_[i].IsSubTree()) continue;
 		for (const auto &f : fields) {
-			if (operator[](i).index == f) {
+			if (container_[i].Value().index == f) {
 				result.push_back(i);
 				break;
 			}

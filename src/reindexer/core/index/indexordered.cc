@@ -78,7 +78,7 @@ SelectKeyResults IndexOrdered<T>::SelectKey(const VariantArray &keys, CondType c
 			if (endIt != this->idx_map.end() && !this->idx_map.key_comp()(static_cast<ref_type>(key2), endIt->first)) endIt++;
 
 			if (endIt != this->idx_map.end() && this->idx_map.key_comp()(endIt->first, static_cast<ref_type>(key1))) {
-				return SelectKeyResults(std::move(res));
+				return SelectKeyResults({res});
 			}
 
 		} break;
@@ -88,7 +88,7 @@ SelectKeyResults IndexOrdered<T>::SelectKey(const VariantArray &keys, CondType c
 
 	if (endIt == startIt || startIt == this->idx_map.end() || endIt == this->idx_map.begin()) {
 		// Empty result
-		return SelectKeyResults(std::move(res));
+		return SelectKeyResults(res);
 	}
 
 	if (opts.unbuiltSortOrders) {
@@ -112,7 +112,6 @@ SelectKeyResults IndexOrdered<T>::SelectKey(const VariantArray &keys, CondType c
 			it++;
 			count++;
 		}
-		// TODO: use count of items in ns to more clever select plan
 		if (count < 50) {
 			struct {
 				T *i_map;
@@ -120,11 +119,10 @@ SelectKeyResults IndexOrdered<T>::SelectKey(const VariantArray &keys, CondType c
 				typename T::iterator startIt, endIt;
 			} ctx = {&this->idx_map, sortId, startIt, endIt};
 
-			auto selector = [&ctx](SelectKeyResult &res) -> bool {
+			auto selector = [&ctx](SelectKeyResult &res) {
 				for (auto it = ctx.startIt; it != ctx.endIt && it != ctx.i_map->end(); it++) {
 					res.push_back(SingleSelectKeyResult(it->second, ctx.sortId));
 				}
-				return false;
 			};
 
 			if (count > 1 && !opts.distinct && !opts.disableIdSetCache)
@@ -135,7 +133,7 @@ SelectKeyResults IndexOrdered<T>::SelectKey(const VariantArray &keys, CondType c
 			return IndexStore<typename T::key_type>::SelectKey(keys, condition, sortId, opts, ctx, rdxCtx);
 		}
 	}
-	return SelectKeyResults(std::move(res));
+	return SelectKeyResults(res);
 }
 
 template <typename T>
@@ -204,7 +202,7 @@ static Index *IndexOrdered_New(const IndexDef &idef, const PayloadType payloadTy
 		case IndexDoubleBTree:
 			return new IndexOrdered<number_map<double, KeyEntryT>>(idef, payloadType, fields);
 		case IndexCompositeBTree:
-			return new IndexOrdered<payload_map<KeyEntryT, true>>(idef, payloadType, fields);
+			return new IndexOrdered<payload_map<KeyEntryT>>(idef, payloadType, fields);
 		default:
 			abort();
 	}

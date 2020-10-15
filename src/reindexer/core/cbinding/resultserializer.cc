@@ -45,14 +45,10 @@ void WrResultSerializer::putQueryParams(const QueryResults* results) {
 }
 
 void WrResultSerializer::putExtraParams(const QueryResults* results) {
-	for (const AggregationResult& aggregationRes : results->aggregationResults) {
+	for (auto& ar : results->aggregationResults) {
 		PutVarUint(QueryResultAggregation);
 		auto slicePosSaver = StartSlice();
-		if ((opts_.flags & kResultsFormatMask) == kResultsMsgPack) {
-			aggregationRes.GetMsgPack(*this);
-		} else {
-			aggregationRes.GetJSON(*this);
-		}
+		ar.GetJSON(*this);
 	}
 
 	if (!results->explainResults.empty()) {
@@ -77,7 +73,7 @@ void WrResultSerializer::putItemParams(const QueryResults* result, int idx, bool
 		PutVarUint(itemRef.Nsid());
 	}
 
-	if (opts_.flags & kResultsWithRank) {
+	if (opts_.flags & kResultsWithPercents) {
 		PutVarUint(itemRef.Proc());
 	}
 
@@ -101,9 +97,6 @@ void WrResultSerializer::putItemParams(const QueryResults* result, int idx, bool
 			PutUInt64(uintptr_t(itemRef.Value().Ptr()));
 			break;
 		case kResultsPure:
-			break;
-		case kResultsMsgPack:
-			err = it.GetMsgPack(*this);
 			break;
 		default:
 			throw Error(errParams, "Can't serialize query results: unknown formar %d", int((opts_.flags & kResultsFormatMask)));
@@ -135,21 +128,18 @@ bool WrResultSerializer::PutResults(const QueryResults* result) {
 
 	// Result has items from multiple namespaces, so pass nsid to each item
 	if (result->getMergedNSCount() > 1) opts_.flags |= kResultsWithNsID;
+
 	// Result has joined items, so pass them to client within items from main NS
 	if (result->joined_.size() > 0) opts_.flags |= kResultsWithJoined;
 
-	if (result->haveRank) opts_.flags |= kResultsWithRank;
-	if (result->needOutputRank) opts_.flags |= kResultsNeedOutputRank;
+	if (result->haveProcent) opts_.flags |= kResultsWithPercents;
 	// If data is not cacheable, just do not pass item's ID and LSN. Clients should not cache this data
 	if (result->nonCacheableData) opts_.flags &= ~kResultsWithItemID;
-	// MsgPack items contain fields names so there is no need to transfer payload types
-	// and joined data, as well as for JSON (they both contain it already)
-	if ((opts_.flags & kResultsFormatMask) == kResultsJson || (opts_.flags & kResultsFormatMask) == kResultsMsgPack) {
-		opts_.flags &= ~(kResultsWithJoined | kResultsWithPayloadTypes);
-	}
+	// for JSON results joined field are embeded to json's, so no need to transfer separate joined data items
+	// JSON results already has resolved names, so no need to transfer payload types
+	if ((opts_.flags & kResultsFormatMask) == kResultsJson) opts_.flags &= ~(kResultsWithJoined | kResultsWithPayloadTypes);
 
 	putQueryParams(result);
-	size_t saveLen = len_;
 
 	for (unsigned i = 0; i < opts_.fetchLimit; ++i) {
 		// Put Item ID and version
@@ -157,7 +147,7 @@ bool WrResultSerializer::PutResults(const QueryResults* result) {
 
 		if (opts_.flags & kResultsWithJoined) {
 			auto rowIt = result->begin() + (i + opts_.fetchOffset);
-			auto jIt = rowIt.GetJoined();
+			auto jIt = joins::ItemIterator::FromQRIterator(rowIt);
 			PutVarUint(jIt.getJoinedItemsCount() > 0 ? jIt.getJoinedFieldsCount() : 0);
 			if (jIt.getJoinedItemsCount() > 0) {
 				size_t joinedField = rowIt.qr_->joined_.size();
@@ -174,7 +164,7 @@ bool WrResultSerializer::PutResults(const QueryResults* result) {
 				}
 			}
 		}
-		if (i == 0) grow((opts_.fetchLimit - 1) * (len_ - saveLen));
+		if (i == 0) grow((opts_.fetchLimit - 1) * len_);
 	}
 	return opts_.fetchOffset + opts_.fetchLimit >= result->Count();
 }

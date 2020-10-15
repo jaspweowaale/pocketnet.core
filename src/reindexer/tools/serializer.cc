@@ -124,14 +124,6 @@ p_string Serializer::GetPVString() {
 	return p_string(ret);
 }
 
-p_string Serializer::GetPSlice() {
-	auto ret = reinterpret_cast<const l_string_hdr *>(buf + pos);
-	uint32_t l = GetUInt32();
-	checkbound(pos, l, len);
-	pos += l;
-	return p_string(ret);
-}
-
 bool Serializer::GetBool() { return bool(GetVarUint()); }
 
 WrSerializer::WrSerializer() : buf_(inBuf_), len_(0), cap_(sizeof(inBuf_)) {}
@@ -389,17 +381,12 @@ std::unique_ptr<uint8_t[]> WrSerializer::DetachBuf() {
 	cap_ = sizeof(inBuf_);
 	len_ = 0;
 	return ret;
-}
+};
 
 void WrSerializer::Write(string_view slice) {
 	grow(slice.size());
 	memcpy(&buf_[len_], slice.data(), slice.size());
 	len_ += slice.size();
-}
-
-int msgpack_wrserializer_write(void *data, const char *buf, size_t len) {
-	reinterpret_cast<reindexer::WrSerializer *>(data)->Write(reindexer::string_view(buf, len));
-	return 0;
 }
 
 }  // namespace reindexer

@@ -40,7 +40,7 @@ public:
 	}
 	void append(string_view data) {
 		if (!data_ || len_ + data.size() > cap_) {
-			cap_ = std::max(size_t(0x1000), size_t(len_ + data.size()));
+			cap_ = std::max(0x1000, int(len_ + data.size()));
 			uint8_t *newdata = new uint8_t[cap_];
 			if (data_) {
 				memcpy(newdata, data_, len_);
@@ -51,7 +51,7 @@ public:
 		memcpy(data_ + len_, data.data(), data.size());
 		len_ += data.size();
 	}
-	size_t size() { return len_ - offset_; }
+	unsigned size() { return len_ - offset_; }
 	uint8_t *data() { return data_ + offset_; }
 
 	uint8_t *data_;
@@ -63,11 +63,10 @@ public:
 template <typename Mutex>
 class chain_buf {
 public:
-	chain_buf(size_t cap) : ring_(cap) {}
+	chain_buf(unsigned cap) : ring_(cap) {}
 	void write(chunk &&ch) {
 		if (ch.size()) {
 			std::unique_lock<Mutex> lck(mtx_);
-			data_size_ += ch.size();
 			ring_[head_] = std::move(ch);
 			head_ = (head_ + 1) % ring_.size();
 			assert(head_ != tail_);
@@ -85,8 +84,6 @@ public:
 	}
 	void erase(size_t nread) {
 		std::unique_lock<Mutex> lck(mtx_);
-		assert(data_size_ >= nread);
-		data_size_ -= nread;
 		while (nread) {
 			assert(head_ != tail_);
 			chunk &cur = ring_[tail_];
@@ -114,29 +111,24 @@ public:
 		return ret;
 	}
 
-	size_t size() {
+	unsigned size() {
 		std::unique_lock<Mutex> lck(mtx_);
 		return (head_ - tail_ + ring_.size()) % ring_.size();
 	}
 
-	size_t data_size() {
-		std::unique_lock<Mutex> lck(mtx_);
-		return data_size_;
-	}
-
-	size_t capacity() {
+	unsigned capacity() {
 		std::unique_lock<Mutex> lck(mtx_);
 		return ring_.size() - 1;
 	}
 	void clear() {
 		std::unique_lock<Mutex> lck(mtx_);
-		head_ = tail_ = data_size_ = 0;
+		head_ = tail_ = 0;
 	}
 
 protected:
-	size_t head_ = 0, tail_ = 0, data_size_ = 0;
+	unsigned head_ = 0, tail_ = 0;
 	std::vector<chunk> ring_, free_;
 	Mutex mtx_;
 };
 
-}  // namespace reindexer
+};  // namespace reindexer

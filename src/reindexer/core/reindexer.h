@@ -1,9 +1,5 @@
 #pragma once
 
-#ifndef REINDEX_VERSION
-#define REINDEX_VERSION "2.13.0"
-#endif
-
 #include "core/namespacedef.h"
 #include "core/query/query.h"
 #include "core/queryresults/queryresults.h"
@@ -19,8 +15,6 @@ using std::chrono::milliseconds;
 
 class ReindexerImpl;
 class IUpdatesObserver;
-class IClientsStats;
-class UpdatesFilters;
 
 /// The main Reindexer interface. Holds database object<br>
 /// *Thread safety*: All methods of Reindexer are thread safe. <br>
@@ -35,8 +29,7 @@ public:
 	using Completion = std::function<void(const Error &err)>;
 
 	/// Create Reindexer database object
-	/// @param clientsStats - object for receiving clients statistics
-	Reindexer(IClientsStats *clientsStats = nullptr);
+	Reindexer();
 	/// Destrory Reindexer database object
 	~Reindexer();
 	/// Create not holding copy
@@ -93,14 +86,6 @@ public:
 	/// @param nsName - Name of namespace
 	/// @param index - index name
 	Error DropIndex(string_view nsName, const IndexDef &index);
-	/// Set fields schema for namespace
-	/// @param nsName - Name of namespace
-	/// @param schema - JSON in JsonSchema format
-	Error SetSchema(string_view nsName, string_view schema);
-	/// Get fields schema for namespace
-	/// @param nsName - Name of namespace
-	/// @param schema - result JSON in JsonSchema format
-	Error GetSchema(string_view nsName, string &schema);
 	/// Get list of all available namespaces
 	/// @param defs - std::vector of NamespaceDef of available namespaves
 	/// @param opts - Enumeration options
@@ -195,13 +180,8 @@ public:
 	/// Subscribe to updates of database
 	/// Cancelation context doesn't affect this call
 	/// @param observer - Observer interface, which will receive updates
-	/// @param filters - Subscription filters set
-	/// @param opts - Subscription options (allows to either add new filters or reset them)
-	Error SubscribeUpdates(IUpdatesObserver *observer, const UpdatesFilters &filters, SubscriptionOpts opts = SubscriptionOpts());
-	/// Unsubscribe from updates of database
-	/// Cancelation context doesn't affect this call
-	/// @param observer - Observer interface, which will be unsubscribed updates
-	Error UnsubscribeUpdates(IUpdatesObserver *observer);
+	/// @param subscribe - true: subscribe, false: unsubscribe
+	Error SubscribeUpdates(IUpdatesObserver *observer, bool subscribe);
 
 	/// Add cancelable context
 	/// @param ctx - context pointer
@@ -215,23 +195,13 @@ public:
 	/// Add activityTracer
 	/// @param activityTracer - name of activity tracer
 	/// @param user - user identifying information
-	/// @param connectionId - unique identifier for the connection
-	Reindexer WithActivityTracer(string_view activityTracer, string_view user, int connectionId) const {
-		return Reindexer(impl_, ctx_.WithActivityTracer(activityTracer, user, connectionId));
-	}
 	Reindexer WithActivityTracer(string_view activityTracer, string_view user) const {
 		return Reindexer(impl_, ctx_.WithActivityTracer(activityTracer, user));
 	}
-
 	/// Set activityTracer to current DB
 	/// @param activityTracer - name of activity tracer
 	/// @param user - user identifying information
-	/// @param connectionId - unique identifier for the connection
 	void SetActivityTracer(string_view activityTracer, string_view user) { ctx_.SetActivityTracer(activityTracer, user); }
-	void SetActivityTracer(string_view activityTracer, string_view user, int connectionId) {
-		ctx_.SetActivityTracer(activityTracer, user, connectionId);
-	}
-
 	bool NeedTraceActivity() const;
 
 	typedef QueryResults QueryResultsT;

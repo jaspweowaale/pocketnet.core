@@ -38,6 +38,8 @@ protected:
 
 	template <class Data>
 	void BuildVdocs(Data& data);
+
+	void initSearchers();
 };
 
 Index* FastIndexText_New(const IndexDef& idef, const PayloadType payloadType, const FieldsSet& fields);

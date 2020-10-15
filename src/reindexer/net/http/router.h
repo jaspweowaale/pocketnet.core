@@ -65,7 +65,7 @@ typedef string_view UrlParam;
 
 struct HttpStatus {
 	HttpStatus() { code = StatusOK; }
-	HttpStatus(HttpStatusCode httpcode, string httpwhat) : code(httpcode), what(std::move(httpwhat)) {}
+	HttpStatus(HttpStatusCode httpcode, const string &httpwhat) : code(httpcode), what(httpwhat) {}
 	explicit HttpStatus(const Error &err) : what(err.what()) { code = errCodeToHttpStatus(err.code()); }
 
 	HttpStatusCode code;
@@ -147,7 +147,6 @@ struct ClientData {
 struct Context {
 	int JSON(int code, string_view slice);
 	int JSON(int code, chunk &&chunk);
-	int MSGPACK(int code, chunk &&chunk);
 	int String(int code, string_view slice);
 	int String(int code, chunk &&chunk);
 	int File(int code, string_view path, string_view data = string_view());

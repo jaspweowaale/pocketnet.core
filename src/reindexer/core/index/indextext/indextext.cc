@@ -1,9 +1,8 @@
 
 #include "indextext.h"
 #include <memory>
-#include "core/ft/filters/kblayout.h"
-#include "core/ft/filters/synonyms.h"
-#include "core/ft/filters/translit.h"
+#include "core/ft/ft_fuzzy/searchers/kblayout.h"
+#include "core/ft/ft_fuzzy/searchers/translit.h"
 #include "core/rdxcontext.h"
 #include "estl/smart_lock.h"
 #include "tools/errors.h"
@@ -22,10 +21,10 @@ IndexText<T>::IndexText(const IndexText<T> &other) : IndexUnordered<T>(other), c
 
 template <typename T>
 void IndexText<T>::initSearchers() {
+	holder_.searchers_.clear();
 	holder_.stemmers_.clear();
-	holder_.translit_.reset(new Translit);
-	holder_.kbLayout_.reset(new KbLayout);
-	holder_.synonyms_.reset(new Synonyms);
+	holder_.searchers_.push_back(search_engine::ISeacher::Ptr(new search_engine::Translit));
+	holder_.searchers_.push_back(search_engine::ISeacher::Ptr(new search_engine::KbLayout));
 	for (const char **lang = stemLangs; *lang; ++lang) {
 		holder_.stemmers_.emplace(*lang, *lang);
 	}
@@ -92,7 +91,7 @@ SelectKeyResults IndexText<T>::SelectKey(const VariantArray &keys, CondType cond
 			logPrintf(LogInfo, "Get search results for '%s' in '%s' from cache", keys[0].As<string>(),
 					  this->payloadType_ ? this->payloadType_->Name() : "");
 			res.push_back(SingleSelectKeyResult(cache_ft.val.ids));
-			SelectKeyResults r(std::move(res));
+			SelectKeyResults r(res);
 			assert(cache_ft.val.ctx);
 			ftctx->SetData(cache_ft.val.ctx);
 			return r;
@@ -126,7 +125,8 @@ SelectKeyResults IndexText<T>::SelectKey(const VariantArray &keys, CondType cond
 
 		res.push_back(SingleSelectKeyResult(mergedIds));
 	}
-	return SelectKeyResults(std::move(res));
+	SelectKeyResults r(res);
+	return r;
 }
 
 template <typename T>
@@ -135,6 +135,6 @@ FieldsGetter IndexText<T>::Getter() {
 }
 
 template class IndexText<unordered_str_map<FtKeyEntry>>;
-template class IndexText<unordered_payload_map<FtKeyEntry, true>>;
+template class IndexText<unordered_payload_map<FtKeyEntry>>;
 
 }  // namespace reindexer

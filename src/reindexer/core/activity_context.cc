@@ -38,19 +38,6 @@ std::vector<Activity> ActivityContainer::List() {
 	return ret;
 }
 
-bool ActivityContainer::ActivityForIpConnection(int id, Activity& act) {
-	std::unique_lock<std::mutex> lck(mtx_);
-
-	for (const RdxActivityContext* ctx : cont_) {
-		if (ctx->CheckConnectionId(id)) {
-			act = *ctx;
-			return true;
-		}
-	}
-
-	return false;
-}
-
 string_view Activity::DescribeState(State st) {
 	switch (st) {
 		case InProgress:
@@ -87,9 +74,8 @@ void Activity::GetJSON(WrSerializer& ser) const {
 }
 
 RdxActivityContext::RdxActivityContext(string_view activityTracer, string_view user, string_view query, ActivityContainer& parent,
-									   int ipConnectionId, bool clientState)
-	: data_{nextId(),		string(activityTracer),			  string(user),			string(query),
-			ipConnectionId, std::chrono::system_clock::now(), Activity::InProgress, ""_sv},
+									   bool clientState)
+	: data_{nextId(), string(activityTracer), string(user), string(query), std::chrono::system_clock::now(), Activity::InProgress, ""_sv},
 	  state_(serializeState(clientState ? Activity::Sending : Activity::InProgress)),
 	  parent_(&parent)
 #ifndef NDEBUG

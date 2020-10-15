@@ -32,12 +32,9 @@ public:
 	uint64_t GetVarUint();
 	string_view GetVString();
 	p_string GetPVString();
-	p_string GetPSlice();
 	bool GetBool();
 	size_t Pos() { return pos; }
 	void SetPos(size_t p) { pos = p; }
-	const uint8_t *Buf() const { return buf; }
-	size_t Len() const { return len; }
 
 protected:
 	const uint8_t *buf;
@@ -95,17 +92,9 @@ public:
 
 	struct SliceHelper {
 		SliceHelper(WrSerializer *ser, size_t pos) : ser_(ser), pos_(pos) {}
-		SliceHelper(const SliceHelper &) = delete;
-		SliceHelper operator=(const SliceHelper &) = delete;
+		SliceHelper(const WrSerializer &) = delete;
+		SliceHelper operator=(const WrSerializer &) = delete;
 		SliceHelper(SliceHelper &&other) noexcept : ser_(other.ser_), pos_(other.pos_) { other.ser_ = nullptr; }
-		SliceHelper &operator=(SliceHelper &&other) noexcept {
-			if (this != &other) {
-				ser_ = other.ser_;
-				pos_ = other.pos_;
-				other.ser_ = nullptr;
-			}
-			return *this;
-		}
 		~SliceHelper();
 
 		WrSerializer *ser_;
@@ -196,9 +185,8 @@ public:
 	uint8_t *Buf() const;
 	std::unique_ptr<uint8_t[]> DetachBuf();
 	chunk DetachChunk();
-	void Reset(size_t len = 0) { len_ = len; }
+	void Reset() { len_ = 0; }
 	size_t Len() const { return len_; }
-	size_t Cap() const { return cap_; }
 	void Reserve(size_t cap);
 	string_view Slice() const { return string_view(reinterpret_cast<const char *>(buf_), len_); }
 	const char *c_str() {
@@ -214,7 +202,5 @@ protected:
 	size_t cap_;
 	uint8_t inBuf_[0x100];
 };
-
-int msgpack_wrserializer_write(void *data, const char *buf, size_t len);
 
 }  // namespace reindexer

@@ -25,8 +25,8 @@ struct QueryEntry {
 	QueryEntry(CondType cond, const string &idx, int idxN, bool dist = false) : index(idx), idxNo(idxN), condition(cond), distinct(dist) {}
 	QueryEntry() = default;
 
-	bool operator==(const QueryEntry &) const noexcept;
-	bool operator!=(const QueryEntry &other) const noexcept { return !operator==(other); }
+	bool operator==(const QueryEntry &) const;
+	bool operator!=(const QueryEntry &other) const { return !operator==(other); }
 
 	string index;
 	int idxNo = IndexValueType::NotSet;
@@ -43,23 +43,15 @@ struct EqualPosition : public h_vector<unsigned, 2> {};
 class JsonBuilder;
 
 class QueryEntries : public ExpressionTree<OpType, Bracket, 4, QueryEntry> {
-	using Base = ExpressionTree<OpType, Bracket, 4, QueryEntry>;
-	QueryEntries(Base &&b) : Base{std::move(b)} {}
-
 public:
-	QueryEntries() = default;
-	QueryEntries(QueryEntries &&) = default;
-	QueryEntries(const QueryEntries &) = default;
-	QueryEntries &operator=(QueryEntries &&) = default;
-	QueryEntries MakeLazyCopy() & { return {makeLazyCopy()}; }
-
+	bool IsEntry(size_t i) const { return IsValue(i); }
 	void ForEachEntry(const std::function<void(const QueryEntry &)> &func) const { ExecuteAppropriateForEach(func); }
 	void ForEachEntry(const std::function<void(QueryEntry &)> &func) { ExecuteAppropriateForEach(func); }
 	const QueryEntry &operator[](size_t i) const {
 		assert(i < container_.size());
 		return container_[i].Value();
 	}
-	QueryEntry &Entry(size_t i) {
+	QueryEntry &operator[](size_t i) {
 		assert(i < container_.size());
 		return container_[i].Value();
 	}
@@ -92,15 +84,13 @@ extern template std::pair<unsigned, EqualPosition> QueryEntries::DetermineEqualP
 
 struct UpdateEntry {
 	UpdateEntry() {}
-	UpdateEntry(string c, VariantArray v, FieldModifyMode m = FieldModeSet, bool e = false)
-		: column(std::move(c)), values(std::move(v)), mode(m), isExpression(e) {}
+	UpdateEntry(const string &c, const VariantArray &v, FieldModifyMode m = FieldModeSet) : column(c), values(v), mode(m) {}
 	bool operator==(const UpdateEntry &) const;
 	bool operator!=(const UpdateEntry &) const;
 	string column;
 	VariantArray values;
 	FieldModifyMode mode = FieldModeSet;
 	bool isExpression = false;
-	bool isArray = false;
 };
 
 struct QueryJoinEntry {
@@ -126,7 +116,7 @@ struct SortingEntries : public h_vector<SortingEntry, 1> {};
 
 struct AggregateEntry {
 	AggregateEntry() = default;
-	AggregateEntry(AggType type, const h_vector<string, 1> &fields, unsigned limit = UINT_MAX, unsigned offset = 0)
+	AggregateEntry(AggType type, const h_vector<string, 1> &fields, unsigned limit, unsigned offset)
 		: type_(type), fields_(fields), limit_(limit), offset_(offset) {}
 	bool operator==(const AggregateEntry &) const;
 	bool operator!=(const AggregateEntry &) const;

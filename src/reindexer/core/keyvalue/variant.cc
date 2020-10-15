@@ -146,34 +146,6 @@ string Variant::As<string>() const {
 }
 
 template <>
-string Variant::As<string>(const PayloadType &pt, const FieldsSet &fields) const {
-	switch (type_) {
-		case KeyValueComposite: {
-			ConstPayload pl(pt, operator const PayloadValue &());
-			VariantArray va;
-			size_t tagsPathIdx = 0;
-			for (auto field : fields) {
-				bool fieldFromCjson = (field == IndexValueType::SetByJsonPath);
-				VariantArray va1;
-				if (fieldFromCjson) {
-					assert(tagsPathIdx < fields.getTagsPathsLength());
-					pl.GetByJsonPath(fields.getTagsPath(tagsPathIdx++), va1, type_);
-				} else {
-					pl.Get(field, va1);
-				}
-				va.insert(va.end(), va1.begin(), va1.end());
-			}
-			WrSerializer wrser;
-			va.Dump(wrser);
-			return string(wrser.Slice());
-		}
-
-		default:
-			return As<string>();
-	}
-}
-
-template <>
 int Variant::As<int>() const {
 	try {
 		switch (type_) {
@@ -186,7 +158,7 @@ int Variant::As<int>() const {
 			case KeyValueDouble:
 				return int(value_double);
 			case KeyValueString: {
-				return std::stoi(operator p_string().data());
+				return stoi(operator p_string());
 			}
 			case KeyValueComposite:
 			case KeyValueTuple:
@@ -331,9 +303,9 @@ int Variant::relaxCompareWithString(string_view str) const {
 
 int Variant::RelaxCompare(const Variant &other, const CollateOpts &collateOpts) const {
 	if (Type() == other.Type()) return Compare(other, collateOpts);
-	if (other.Type() == KeyValueString) {
+	if (Type() == KeyValueString) {
 		return relaxCompareWithString(static_cast<p_string>(other));
-	} else if (Type() == KeyValueString) {
+	} else if (other.Type() == KeyValueString) {
 		return -other.relaxCompareWithString(static_cast<p_string>(*this));
 	} else if ((Type() == KeyValueInt || Type() == KeyValueInt64 || Type() == KeyValueDouble) &&
 			   (other.Type() == KeyValueInt || other.Type() == KeyValueInt64 || other.Type() == KeyValueDouble)) {
@@ -487,15 +459,8 @@ const char *Variant::TypeName(KeyValueType t) {
 
 Variant::operator key_string() const {
 	assertKeyType(type_, KeyValueString);
-	if (hold_) {
-		return *cast<key_string>();
-	} else if (cast<p_string>()->type() == p_string::tagKeyString) {
-		return cast<p_string>()->getKeyString();
-	} else {
-		return make_key_string(cast<p_string>()->data(), cast<p_string>()->size());
-	}
+	return hold_ ? *cast<key_string>() : make_key_string(cast<p_string>()->data(), cast<p_string>()->size());
 }
-
 Variant::operator p_string() const {
 	assertKeyType(type_, KeyValueString);
 	return hold_ ? p_string(*cast<key_string>()) : *cast<p_string>();
@@ -542,9 +507,7 @@ void Variant::Dump(WrSerializer &wrser) const {
 	}
 }
 
-bool VariantArray::IsArrayValue() const noexcept { return isArrayValue || (!isObjectValue && size() > 1); }
-bool VariantArray::IsNullValue() const { return size() == 1 && front().IsNullValue(); }
-KeyValueType VariantArray::ArrayType() const { return empty() ? KeyValueNull : front().Type(); }
+bool VariantArray::IsNullValue() const { return (size() == 1 && front().IsNullValue()); }
 
 void VariantArray::Dump(WrSerializer &wrser) const {
 	wrser << '{';

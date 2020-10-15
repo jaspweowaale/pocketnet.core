@@ -95,12 +95,10 @@ Item::~Item() {
 	delete impl_;
 }
 
-Error Item::FromJSON(string_view slice, char **endp, bool pkOnly) { return impl_->FromJSON(slice, endp, pkOnly); }
-Error Item::FromCJSON(string_view slice, bool pkOnly) { return impl_->FromCJSON(slice, pkOnly); }
+Error Item::FromJSON(const string_view &slice, char **endp, bool pkOnly) { return impl_->FromJSON(slice, endp, pkOnly); }
+Error Item::FromCJSON(const string_view &slice, bool pkOnly) { return impl_->FromCJSON(slice, pkOnly); }
 string_view Item::GetCJSON() { return impl_->GetCJSON(); }
 string_view Item::GetJSON() { return impl_->GetJSON(); }
-Error Item::FromMsgPack(string_view buf, size_t &offset) { return impl_->FromMsgPack(buf, offset); }
-Error Item::GetMsgPack(WrSerializer &wrser) { return impl_->GetMsgPack(wrser); }
 
 int Item::NumFields() { return impl_->Type().NumFields(); }
 Item::FieldRef Item::operator[](int field) const {
@@ -108,7 +106,7 @@ Item::FieldRef Item::operator[](int field) const {
 	return FieldRef(field, impl_);
 }
 
-Item::FieldRef Item::operator[](string_view name) const {
+Item::FieldRef Item::operator[](string_view name) {
 	int field = 0;
 	if (impl_->Type().FieldByName(name, field)) {
 		return FieldRef(field, impl_);

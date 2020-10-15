@@ -30,10 +30,6 @@ void JoinedSelector::selectFromRightNs(QueryResults &joinItemR, bool &found, boo
 		ctx.skipIndexesLookup = true;
 		ctx.functions = &selectFunctions_;
 		rightNs_->Select(joinItemR, ctx, rdxCtx_);
-		if (preResult_->explainOneSelect.empty() && !joinItemR.explainResults.empty()) {
-			preResult_->explainOneSelect = joinItemR.explainResults;
-			itemQuery_.explain_ = false;
-		}
 
 		found = joinItemR.Count();
 		matchedAtLeastOnce = ctx.matchedAtLeastOnce;
@@ -69,18 +65,17 @@ bool JoinedSelector::Process(IdType rowId, int nsId, ConstPayload payload, bool 
 		return true;
 	}
 
-	const auto startTime = ExplainCalc::Clock::now();
 	// Put values to join conditions
 	size_t index = 0;
 	for (auto &je : joinQuery_.joinEntries_) {
 		bool nonIndexedField = (je.idxNo == IndexValueType::SetByJsonPath);
 		bool isIndexSparse = !nonIndexedField && leftNs_->indexes_[je.idxNo]->Opts().IsSparse();
 		if (nonIndexedField || isIndexSparse) {
-			VariantArray &values = itemQuery_.entries.Entry(index).values;
+			VariantArray &values = itemQuery_.entries[index].values;
 			KeyValueType type = values.empty() ? KeyValueUndefined : values[0].Type();
 			payload.GetByJsonPath(je.index_, leftNs_->tagsMatcher_, values, type);
 		} else {
-			payload.Get(je.idxNo, itemQuery_.entries.Entry(index).values);
+			payload.Get(je.idxNo, itemQuery_.entries[index].values);
 		}
 		++index;
 	}
@@ -103,7 +98,6 @@ bool JoinedSelector::Process(IdType rowId, int nsId, ConstPayload payload, bool 
 		nsJoinRes.Insert(rowId, joinedFieldIdx_, std::move(joinItemR));
 	}
 	if (matchedAtLeastOnce) ++matched_;
-	preResult_->selectTime += (ExplainCalc::Clock::now() - startTime);
 	return matchedAtLeastOnce;
 }
 

@@ -5,21 +5,19 @@
 namespace reindexer {
 class FieldsExtractor {
 public:
-	FieldsExtractor() = default;
-	FieldsExtractor(VariantArray *va, KeyValueType expectedType, int expectedPathDepth)
-		: values_(va), expectedType_(expectedType), expectedPathDepth_(expectedPathDepth) {}
-	FieldsExtractor(FieldsExtractor &&other) = default;
+	FieldsExtractor(VariantArray *va = nullptr, KeyValueType expectedType = KeyValueUndefined) : values_(va), expectedType_(expectedType) {}
 	FieldsExtractor(const FieldsExtractor &) = delete;
+	FieldsExtractor(FieldsExtractor &&other) : values_(other.values_), expectedType_(other.expectedType_) {}
 	FieldsExtractor &operator=(const FieldsExtractor &) = delete;
 	FieldsExtractor &operator=(FieldsExtractor &&) = delete;
 
 	void SetTagsMatcher(const TagsMatcher *) {}
 
 	/// Start new object
-	FieldsExtractor Object(int) { return FieldsExtractor(values_, expectedType_, expectedPathDepth_ - 1); }
-	FieldsExtractor Array(int) { return FieldsExtractor(values_, expectedType_, expectedPathDepth_ - 1); }
-	FieldsExtractor Object(string_view) { return FieldsExtractor(values_, expectedType_, expectedPathDepth_ - 1); }
-	FieldsExtractor Array(string_view) { return FieldsExtractor(values_, expectedType_, expectedPathDepth_ - 1); }
+	FieldsExtractor Object(int) { return FieldsExtractor(values_, expectedType_); }
+	FieldsExtractor Array(int) { return FieldsExtractor(values_, expectedType_); }
+	FieldsExtractor Object(string_view) { return FieldsExtractor(values_, expectedType_); }
+	FieldsExtractor Array(string_view) { return FieldsExtractor(values_, expectedType_); }
 
 	template <typename T>
 	void Array(int /*tagName*/, span<T> data) {
@@ -30,10 +28,8 @@ public:
 	}
 
 	FieldsExtractor &Put(int, Variant arg) {
-		if (expectedPathDepth_ > 0) return *this;
 		if (expectedType_ != KeyValueUndefined && expectedType_ != KeyValueComposite) arg.convert(expectedType_);
 		values_->push_back(arg);
-		if (expectedPathDepth_ < 0) values_->MarkObject();
 		return *this;
 	}
 
@@ -42,7 +38,6 @@ public:
 protected:
 	VariantArray *values_ = nullptr;
 	KeyValueType expectedType_;
-	int expectedPathDepth_ = 0;
-};
+};  // namespace reindexer
 
 }  // namespace reindexer
