@@ -36,7 +36,7 @@ public:
 	fast_hash_set<string, hash_str, equal_str> stopWords;
 	vector<Synonym> synonyms;
 	int logLevel = 0;
-	string extraWordSymbols = "-/+";
+	string extraWordSymbols = "-/+%.";
 
 protected:
 	void parseBase(const gason::JsonNode& root);
