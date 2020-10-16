@@ -1461,6 +1461,10 @@ fi
 ac_configure_args="${ac_configure_args} --disable-shared --with-pic --with-bignum=no --enable-module-recovery --disable-jni"
 AC_CONFIG_SUBDIRS([src/secp256k1])
 
+AC_DEFINE(REINDEX_CORE_BUILD, 1, [Define this symbol for Reindexer])
+AC_DEFINE(REINDEX_WITH_LEVELDB, 1, [Define this symbol for Reindexer])
+#AC_DEFINE(REINDEX_VERSION, "2.6.0")
+
 AC_OUTPUT
 
 dnl Taken from https://wiki.debian.org/RpathIssue

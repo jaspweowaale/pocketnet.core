@@ -27,7 +27,7 @@ void ExplainCalc::LogDump(int logLevel) {
 
 		if (jselectors_) {
 			for (auto &js : *jselectors_) {
-				if (js.Type() == JoinType::LeftJoin || js.Type() == JoinType::Merge) {
+				if (js.Type() == JoinType::LeftJoin || js.Type() == JoinType::MergeJoin) {
 					logPrintf(LogInfo, "%s %s: called %d", SQLEncoder::JoinTypeName(js.Type()), js.RightNsName(), js.Called());
 				} else {
 					logPrintf(LogInfo, "%s %s: called %d, matched %d", SQLEncoder::JoinTypeName(js.Type()), js.RightNsName(), js.Called(),
@@ -109,7 +109,7 @@ const char *ExplainCalc::JoinTypeName(JoinType type) {
 			return "or_inner_join";
 		case JoinType::LeftJoin:
 			return "left_join";
-		case JoinType::Merge:
+		case JoinType::MergeJoin:
 			return "merge";
 		default:
 			return "<unknown>";

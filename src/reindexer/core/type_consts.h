@@ -120,7 +120,7 @@ enum ArithmeticOpType { OpPlus = 0, OpMinus = 1, OpMult = 2, OpDiv = 3 };
 
 enum AggType { AggSum, AggAvg, AggFacet, AggMin, AggMax, AggUnknown = -1 };
 
-enum JoinType { LeftJoin, InnerJoin, OrInnerJoin, Merge };
+enum JoinType { LeftJoin, InnerJoin, OrInnerJoin, MergeJoin };
 
 enum CalcTotalMode { ModeNoTotal, ModeCachedTotal, ModeAccurateTotal };
 

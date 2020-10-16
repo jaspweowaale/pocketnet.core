@@ -19,7 +19,7 @@ else
 LIBUNIVALUE = $(UNIVALUE_LIBS)
 endif
 
-REINDEXER_INCLUDES = -Ileveldb/include -Ireindexer -Ireindexer/vendor -Ireindexer/vendor/msgpack
+REINDEXER_INCLUDES = -Ileveldb/include -Ireindexer -Ireindexer/vendor
 POCKETCOIN_INCLUDES=-I$(builddir) $(BDB_CPPFLAGS) $(BOOST_CPPFLAGS) $(LEVELDB_CPPFLAGS) $(CRYPTO_CFLAGS) $(SSL_CFLAGS)
 
 POCKETCOIN_INCLUDES += -I$(srcdir)/secp256k1/include
@@ -104,8 +104,6 @@ REINDEXER_H = \
     reindexer/client/reindexerconfig.h \
     reindexer/client/resultserializer.h \
     reindexer/client/rpcclient.h \
-    reindexer/client/rpcclientmock.h \
-    reindexer/client/transaction.h \
     reindexer/core/cbinding/cgocancelcontextpool.h \
     reindexer/core/cbinding/reindexer_c.h \
     reindexer/core/cbinding/reindexer_ctypes.h \
@@ -117,23 +115,14 @@ REINDEXER_H = \
     reindexer/core/cjson/cjsontools.h \
     reindexer/core/cjson/ctag.h \
     reindexer/core/cjson/fieldextractor.h \
-    reindexer/core/cjson/jschemachecker.h \
     reindexer/core/cjson/jsonbuilder.h \
     reindexer/core/cjson/jsondecoder.h \
-    reindexer/core/cjson/msgpackbuilder.h \
-    reindexer/core/cjson/msgpackdecoder.h \
-    reindexer/core/cjson/objtype.h \
-    reindexer/core/cjson/tagslengths.h \
     reindexer/core/cjson/tagsmatcher.h \
     reindexer/core/cjson/tagsmatcherimpl.h \
     reindexer/core/cjson/tagspathcache.h \
     reindexer/core/ft/config/baseftconfig.h \
     reindexer/core/ft/config/ftfastconfig.h \
     reindexer/core/ft/config/ftfuzzyconfig.h \
-    reindexer/core/ft/filters/itokenfilter.h \
-    reindexer/core/ft/filters/kblayout.h \
-    reindexer/core/ft/filters/synonyms.h \
-    reindexer/core/ft/filters/translit.h \
     reindexer/core/ft/ft_fast/dataholder.h \
     reindexer/core/ft/ft_fast/dataprocessor.h \
     reindexer/core/ft/ft_fast/indextexttypes.h \
@@ -145,8 +134,11 @@ REINDEXER_H = \
     reindexer/core/ft/ft_fuzzy/merger/basemerger.h \
     reindexer/core/ft/ft_fuzzy/merger/dataset.h \
     reindexer/core/ft/ft_fuzzy/prefilter/prefilter.h \
+    reindexer/core/ft/ft_fuzzy/searchers/base_searcher/baseseacher.h \
+    reindexer/core/ft/ft_fuzzy/searchers/isearcher.h \
+    reindexer/core/ft/ft_fuzzy/searchers/kblayout.h \
+    reindexer/core/ft/ft_fuzzy/searchers/translit.h \
     reindexer/core/ft/ft_fuzzy/advacedpackedvec.h \
-    reindexer/core/ft/ft_fuzzy/baseseacher.h \
     reindexer/core/ft/ft_fuzzy/searchengine.h \
     reindexer/core/ft/stopwords/stop.h \
     reindexer/core/ft/areaholder.h \
@@ -178,7 +170,6 @@ REINDEXER_H = \
     reindexer/core/namespace/namespace.h \
     reindexer/core/namespace/namespaceimpl.h \
     reindexer/core/namespace/namespacestat.h \
-    reindexer/core/nsselecter/aggregator.h \
     reindexer/core/nsselecter/btreeindexiterator.h \
     reindexer/core/nsselecter/btreeindexiteratorimpl.h \
     reindexer/core/nsselecter/explaincalc.h \
@@ -199,7 +190,6 @@ REINDEXER_H = \
     reindexer/core/payload/payloadvalue.h \
     reindexer/core/query/dsl/dslencoder.h \
     reindexer/core/query/dsl/dslparser.h \
-    reindexer/core/query/dsl/query.json.h \
     reindexer/core/query/sql/sqlencoder.h \
     reindexer/core/query/sql/sqlparser.h \
     reindexer/core/query/sql/sqlsuggester.h \
@@ -228,13 +218,13 @@ REINDEXER_H = \
     reindexer/core/storage/storagefactory.h \
     reindexer/core/storage/storagetype.h \
     reindexer/core/activity_context.h \
+    reindexer/core/aggregator.h \
     reindexer/core/cancelcontextpool.h \
     reindexer/core/comparator.h \
     reindexer/core/comparatorimpl.h \
     reindexer/core/compositearraycomparator.h \
     reindexer/core/dbconfig.h \
     reindexer/core/expressiontree.h \
-    reindexer/core/iclientsstats.h \
     reindexer/core/idset.h \
     reindexer/core/idsetcache.h \
     reindexer/core/indexdef.h \
@@ -243,7 +233,6 @@ REINDEXER_H = \
     reindexer/core/itemimpl.h \
     reindexer/core/joincache.h \
     reindexer/core/lrucache.h \
-    reindexer/core/lsn.h \
     reindexer/core/namespacedef.h \
     reindexer/core/perfstatcounter.h \
     reindexer/core/querycache.h \
@@ -251,7 +240,6 @@ REINDEXER_H = \
     reindexer/core/rdxcontext.h \
     reindexer/core/reindexer.h \
     reindexer/core/reindexerimpl.h \
-    reindexer/core/schema.h \
     reindexer/core/selectkeyresult.h \
     reindexer/core/sortingprioritiestable.h \
     reindexer/core/transaction.h \
@@ -261,7 +249,6 @@ REINDEXER_H = \
     reindexer/debug/allocdebug.h \
     reindexer/debug/backtrace.h \
     reindexer/debug/resolver.h \
-    reindexer/debug/terminate_handler.h \
     reindexer/estl/atomic_unique_ptr.h \
     reindexer/estl/cbuf.h \
     reindexer/estl/chunk_buf.h \
@@ -306,14 +293,12 @@ REINDEXER_H = \
     reindexer/tools/customlocal.h \
     reindexer/tools/errors.h \
     reindexer/tools/filecontentwatcher.h \
-    reindexer/tools/flagguard.h \
     reindexer/tools/fsops.h \
     reindexer/tools/json2kv.h \
     reindexer/tools/jsontools.h \
     reindexer/tools/logger.h \
     reindexer/tools/md5crypt.h \
     reindexer/tools/oscompat.h \
-    reindexer/tools/semversion.h \
     reindexer/tools/serializer.h \
     reindexer/tools/ssize_t.h \
     reindexer/tools/string_regexp_functions.h \
@@ -321,6 +306,7 @@ REINDEXER_H = \
     reindexer/tools/terminalutils.h \
     reindexer/tools/timetools.h \
     reindexer/tools/varint.h \
+    reindexer/vendor/args/args.hpp \
     reindexer/vendor/atoi/atoi.h \
     reindexer/vendor/base64/base64.h \
     reindexer/vendor/cpp-btree/btree.h \
@@ -376,163 +362,6 @@ REINDEXER_H = \
     reindexer/vendor/libstemmer/src_c/stem_UTF_8_swedish.h \
     reindexer/vendor/libstemmer/src_c/stem_UTF_8_turkish.h \
     reindexer/vendor/mpark/variant.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/x86/32.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/x86/64.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/alpha.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/arm.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/blackfin.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/convex.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/ia64.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/m68k.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/mips.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/parisc.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/ppc.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/ptx.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/pyramid.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/rs6k.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/sparc.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/superh.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/sys370.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/sys390.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/x86.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture/z.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/borland.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/clang.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/comeau.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/compaq.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/diab.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/digitalmars.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/dignus.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/edg.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/ekopath.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/gcc.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/gcc_xml.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/greenhills.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/hp_acc.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/iar.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/ibm.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/intel.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/kai.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/llvm.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/metaware.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/metrowerks.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/microtec.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/mpw.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/nvcc.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/palm.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/pgi.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/sgi_mipspro.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/sunpro.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/tendra.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/visualc.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler/watcom.h \
-    reindexer/vendor/msgpack/msgpack/predef/detail/_cassert.h \
-    reindexer/vendor/msgpack/msgpack/predef/detail/_exception.h \
-    reindexer/vendor/msgpack/msgpack/predef/detail/comp_detected.h \
-    reindexer/vendor/msgpack/msgpack/predef/detail/endian_compat.h \
-    reindexer/vendor/msgpack/msgpack/predef/detail/os_detected.h \
-    reindexer/vendor/msgpack/msgpack/predef/detail/platform_detected.h \
-    reindexer/vendor/msgpack/msgpack/predef/detail/test.h \
-    reindexer/vendor/msgpack/msgpack/predef/detail/test_def.h \
-    reindexer/vendor/msgpack/msgpack/predef/hardware/simd/arm/versions.h \
-    reindexer/vendor/msgpack/msgpack/predef/hardware/simd/ppc/versions.h \
-    reindexer/vendor/msgpack/msgpack/predef/hardware/simd/x86/versions.h \
-    reindexer/vendor/msgpack/msgpack/predef/hardware/simd/x86_amd/versions.h \
-    reindexer/vendor/msgpack/msgpack/predef/hardware/simd/arm.h \
-    reindexer/vendor/msgpack/msgpack/predef/hardware/simd/ppc.h \
-    reindexer/vendor/msgpack/msgpack/predef/hardware/simd/x86.h \
-    reindexer/vendor/msgpack/msgpack/predef/hardware/simd/x86_amd.h \
-    reindexer/vendor/msgpack/msgpack/predef/hardware/simd.h \
-    reindexer/vendor/msgpack/msgpack/predef/language/cuda.h \
-    reindexer/vendor/msgpack/msgpack/predef/language/objc.h \
-    reindexer/vendor/msgpack/msgpack/predef/language/stdc.h \
-    reindexer/vendor/msgpack/msgpack/predef/language/stdcpp.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/c/_prefix.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/c/cloudabi.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/c/gnu.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/c/uc.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/c/vms.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/c/zos.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/_prefix.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/cxx.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/dinkumware.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/libcomo.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/modena.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/msl.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/roguewave.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/sgi.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/stdcpp3.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/stlport.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std/vacpp.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/c.h \
-    reindexer/vendor/msgpack/msgpack/predef/library/std.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/bsd/bsdi.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/bsd/dragonfly.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/bsd/free.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/bsd/net.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/bsd/open.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/aix.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/amigaos.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/android.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/beos.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/bsd.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/cygwin.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/haiku.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/hpux.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/ios.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/irix.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/linux.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/macos.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/os400.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/qnxnto.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/solaris.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/unix.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/vms.h \
-    reindexer/vendor/msgpack/msgpack/predef/os/windows.h \
-    reindexer/vendor/msgpack/msgpack/predef/other/endian.h \
-    reindexer/vendor/msgpack/msgpack/predef/other/workaround.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/cloudabi.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/ios.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/mingw.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/mingw32.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/mingw64.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/windows_desktop.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/windows_phone.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/windows_runtime.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/windows_server.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/windows_store.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/windows_system.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform/windows_uwp.h \
-    reindexer/vendor/msgpack/msgpack/predef/architecture.h \
-    reindexer/vendor/msgpack/msgpack/predef/compiler.h \
-    reindexer/vendor/msgpack/msgpack/predef/hardware.h \
-    reindexer/vendor/msgpack/msgpack/predef/language.h \
-    reindexer/vendor/msgpack/msgpack/predef/library.h \
-    reindexer/vendor/msgpack/msgpack/predef/make.h \
-    reindexer/vendor/msgpack/msgpack/predef/os.h \
-    reindexer/vendor/msgpack/msgpack/predef/other.h \
-    reindexer/vendor/msgpack/msgpack/predef/platform.h \
-    reindexer/vendor/msgpack/msgpack/predef/version.h \
-    reindexer/vendor/msgpack/msgpack/predef/version_number.h \
-    reindexer/vendor/msgpack/msgpack/fbuffer.h \
-    reindexer/vendor/msgpack/msgpack/object.h \
-    reindexer/vendor/msgpack/msgpack/pack.h \
-    reindexer/vendor/msgpack/msgpack/pack_define.h \
-    reindexer/vendor/msgpack/msgpack/pack_template.h \
-    reindexer/vendor/msgpack/msgpack/sbuffer.h \
-    reindexer/vendor/msgpack/msgpack/sysdep.h \
-    reindexer/vendor/msgpack/msgpack/timestamp.h \
-    reindexer/vendor/msgpack/msgpack/unpack.h \
-    reindexer/vendor/msgpack/msgpack/unpack_define.h \
-    reindexer/vendor/msgpack/msgpack/unpack_template.h \
-    reindexer/vendor/msgpack/msgpack/util.h \
-    reindexer/vendor/msgpack/msgpack/version.h \
-    reindexer/vendor/msgpack/msgpack/version_master.h \
-    reindexer/vendor/msgpack/msgpack/vrefbuffer.h \
-    reindexer/vendor/msgpack/msgpack/zbuffer.h \
-    reindexer/vendor/msgpack/msgpack/zone.h \
-    reindexer/vendor/msgpack/msgpack.h \
-    reindexer/vendor/msgpack/msgpackparser.h \
     reindexer/vendor/murmurhash/MurmurHash3.h \
     reindexer/vendor/picohttpparser/picohttpparser.h \
     reindexer/vendor/prometheus/detail/ckms_quantiles.h \
@@ -557,6 +386,7 @@ REINDEXER_H = \
     reindexer/vendor/prometheus/serializer.h \
     reindexer/vendor/prometheus/summary.h \
     reindexer/vendor/prometheus/text_serializer.h \
+    reindexer/vendor/sort/pdqsort.hpp \
     reindexer/vendor/sparse-map/sparse_growth_policy.h \
     reindexer/vendor/sparse-map/sparse_hash.h \
     reindexer/vendor/sparse-map/sparse_map.h \
@@ -617,8 +447,6 @@ REINDEXER_CC = \
     reindexer/client/reindexer.cc \
     reindexer/client/resultserializer.cc \
     reindexer/client/rpcclient.cc \
-    reindexer/client/rpcclientmock.cc \
-    reindexer/client/transaction.cc \
     reindexer/core/cbinding/reindexer_c.cc \
     reindexer/core/cbinding/resultserializer.cc \
     reindexer/core/cjson/baseencoder.cc \
@@ -626,19 +454,11 @@ REINDEXER_CC = \
     reindexer/core/cjson/cjsondecoder.cc \
     reindexer/core/cjson/cjsonmodifier.cc \
     reindexer/core/cjson/cjsontools.cc \
-    reindexer/core/cjson/jschemachecker.cc \
     reindexer/core/cjson/jsonbuilder.cc \
     reindexer/core/cjson/jsondecoder.cc \
-    reindexer/core/cjson/msgpackbuilder.cc \
-    reindexer/core/cjson/msgpackdecoder.cc \
-    reindexer/core/cjson/readme.md \
-    reindexer/core/cjson/tagslengths.cc \
     reindexer/core/ft/config/baseftconfig.cc \
     reindexer/core/ft/config/ftfastconfig.cc \
     reindexer/core/ft/config/ftfuzzyconfig.cc \
-    reindexer/core/ft/filters/kblayout.cc \
-    reindexer/core/ft/filters/synonyms.cc \
-    reindexer/core/ft/filters/translit.cc \
     reindexer/core/ft/ft_fast/dataholder.cc \
     reindexer/core/ft/ft_fast/dataprocessor.cc \
     reindexer/core/ft/ft_fast/selecter.cc \
@@ -647,8 +467,10 @@ REINDEXER_CC = \
     reindexer/core/ft/ft_fuzzy/dumper/fulltextdumper.cc \
     reindexer/core/ft/ft_fuzzy/merger/basemerger.cc \
     reindexer/core/ft/ft_fuzzy/prefilter/prefilter.cc \
+    reindexer/core/ft/ft_fuzzy/searchers/base_searcher/baseseacher.cc \
+    reindexer/core/ft/ft_fuzzy/searchers/kblayout.cc \
+    reindexer/core/ft/ft_fuzzy/searchers/translit.cc \
     reindexer/core/ft/ft_fuzzy/advacedpackedvec.cc \
-    reindexer/core/ft/ft_fuzzy/baseseacher.cc \
     reindexer/core/ft/ft_fuzzy/searchengine.cc \
     reindexer/core/ft/stopwords/stop_en.cc \
     reindexer/core/ft/stopwords/stop_ru.cc \
@@ -669,7 +491,6 @@ REINDEXER_CC = \
     reindexer/core/namespace/namespace.cc \
     reindexer/core/namespace/namespaceimpl.cc \
     reindexer/core/namespace/namespacestat.cc \
-    reindexer/core/nsselecter/aggregator.cc \
     reindexer/core/nsselecter/explaincalc.cc \
     reindexer/core/nsselecter/itemcomparator.cc \
     reindexer/core/nsselecter/joinedselector.cc \
@@ -684,7 +505,6 @@ REINDEXER_CC = \
     reindexer/core/payload/payloadiface.cc \
     reindexer/core/payload/payloadtype.cc \
     reindexer/core/payload/payloadvalue.cc \
-    reindexer/core/payload/readme.md \
     reindexer/core/query/dsl/dslencoder.cc \
     reindexer/core/query/dsl/dslparser.cc \
     reindexer/core/query/sql/sqlencoder.cc \
@@ -709,33 +529,29 @@ REINDEXER_CC = \
     reindexer/core/storage/rocksdbstorage.cc \
     reindexer/core/storage/storagefactory.cc \
     reindexer/core/activity_context.cc \
+    reindexer/core/aggregator.cc \
     reindexer/core/comparator.cc \
     reindexer/core/compositearraycomparator.cc \
     reindexer/core/dbconfig.cc \
     reindexer/core/expressiontree.cc \
-    reindexer/core/expressiontree.md \
-    reindexer/core/iclientsstats.cc \
     reindexer/core/idset.cc \
     reindexer/core/indexdef.cc \
     reindexer/core/indexopts.cc \
     reindexer/core/item.cc \
     reindexer/core/itemimpl.cc \
     reindexer/core/lrucache.cc \
-    reindexer/core/lsn.cc \
     reindexer/core/namespacedef.cc \
     reindexer/core/perfstatcounter.cc \
     reindexer/core/querystat.cc \
     reindexer/core/rdxcontext.cc \
     reindexer/core/reindexer.cc \
     reindexer/core/reindexerimpl.cc \
-    reindexer/core/schema.cc \
     reindexer/core/sortingprioritiestable.cc \
     reindexer/core/transaction.cc \
     reindexer/core/transactionimpl.cc \
     reindexer/debug/allocdebug.cc \
     reindexer/debug/backtrace.cc \
     reindexer/debug/resolver.cc \
-    reindexer/debug/terminate_handler.cpp \
     reindexer/estl/mutex.cc \
     reindexer/estl/tokenizer.cc \
     reindexer/net/cproto/args.cc \
@@ -750,7 +566,6 @@ REINDEXER_CC = \
     reindexer/net/listener.cc \
     reindexer/net/socket.cc \
     reindexer/net/stat.cc \
-    reindexer/replicator/replication.conf \
     reindexer/replicator/replicator.cc \
     reindexer/replicator/updatesobserver.cc \
     reindexer/replicator/walrecord.cc \
@@ -772,10 +587,7 @@ REINDEXER_CC = \
     reindexer/tools/stringstools.cc \
     reindexer/tools/terminalutils.cc \
     reindexer/tools/timetools.cc \
-    reindexer/vendor/args/args.hpp \
     reindexer/vendor/base64/base64.c \
-    reindexer/vendor/cpp-btree/COPYING \
-    reindexer/vendor/cpp-btree/README \
     reindexer/vendor/double-conversion/bignum-dtoa.cc \
     reindexer/vendor/double-conversion/bignum.cc \
     reindexer/vendor/double-conversion/cached-powers.cc \
@@ -796,13 +608,10 @@ REINDEXER_CC = \
     reindexer/vendor/libbacktrace/sort.c \
     reindexer/vendor/libbacktrace/state.c \
     reindexer/vendor/libdivsufsort/divsufsort.c \
-    reindexer/vendor/libdivsufsort/LICENSE \
-    reindexer/vendor/libdivsufsort/README.md \
     reindexer/vendor/libdivsufsort/sssort.c \
     reindexer/vendor/libdivsufsort/trsort.c \
     reindexer/vendor/libdivsufsort/utils.c \
     reindexer/vendor/libstemmer/libstemmer/libstemmer_utf8.c \
-    reindexer/vendor/libstemmer/libstemmer/modules_utf8.txt \
     reindexer/vendor/libstemmer/runtime/api.c \
     reindexer/vendor/libstemmer/runtime/utilities.c \
     reindexer/vendor/libstemmer/src_c/stem_UTF_8_danish.c \
@@ -821,14 +630,6 @@ REINDEXER_CC = \
     reindexer/vendor/libstemmer/src_c/stem_UTF_8_spanish.c \
     reindexer/vendor/libstemmer/src_c/stem_UTF_8_swedish.c \
     reindexer/vendor/libstemmer/src_c/stem_UTF_8_turkish.c \
-    reindexer/vendor/libstemmer/README \
-    reindexer/vendor/msgpack/msgpack.cc \
-    reindexer/vendor/msgpack/msgpackparser.cc \
-    reindexer/vendor/msgpack/objectc.c \
-    reindexer/vendor/msgpack/unpack.c \
-    reindexer/vendor/msgpack/version.c \
-    reindexer/vendor/msgpack/vrefbuffer.c \
-    reindexer/vendor/msgpack/zone.c \
     reindexer/vendor/murmurhash/MurmurHash3.cc \
     reindexer/vendor/picohttpparser/picohttpparser.c \
     reindexer/vendor/prometheus/impl/detail/ckms_quantiles.cc \
@@ -846,9 +647,7 @@ REINDEXER_CC = \
     reindexer/vendor/prometheus/impl/serializer.cc \
     reindexer/vendor/prometheus/impl/summary.cc \
     reindexer/vendor/prometheus/impl/text_serializer.cc \
-    reindexer/vendor/sort/pdqsort.hpp \
     reindexer/vendor/spdlog/fmt/bundled/format.cc \
-    reindexer/vendor/spdlog/fmt/bundled/LICENSE.rst \
     reindexer/vendor/spdlog/fmt/bundled/ostream.cc \
     reindexer/vendor/spdlog/fmt/bundled/posix.cc \
     reindexer/vendor/spdlog/fmt/bundled/printf.cc \
@@ -995,8 +794,12 @@ obj/build.h: FORCE
 libpocketcoin_util_a-clientversion.$(OBJEXT): obj/build.h
 
 # reindexer library
-libreindexer_a_CPPFLAGS = $(REINDEXER_INCLUDES) -DREINDEX_WITH_LEVELDB
+libreindexer_a_CPPFLAGS = $(REINDEXER_INCLUDES)
+#libreindexer_a_CPPFLAGS += -DREINDEX_CORE_BUILD
+#libreindexer_a_CPPFLAGS += -DREINDEX_WITH_LEVELDB
 libreindexer_a_CXXFLAGS = $(REINDEXER_INCLUDES)
+#libreindexer_a_CXXFLAGS += -DREINDEX_CORE_BUILD
+#libreindexer_a_CXXFLAGS += -DREINDEX_WITH_LEVELDB
 libreindexer_a_SOURCES = \
     $(REINDEXER_H) \
     $(REINDEXER_CC)

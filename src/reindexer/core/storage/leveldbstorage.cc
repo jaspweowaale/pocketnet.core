@@ -1,3 +1,7 @@
+#ifndef REINDEX_WITH_LEVELDB //TODO: Move it in configure or/and makefile
+#define REINDEX_WITH_LEVELDB 1
+#endif
+
 #ifdef REINDEX_WITH_LEVELDB
 
 #include "leveldbstorage.h"
