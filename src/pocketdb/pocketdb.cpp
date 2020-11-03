@@ -40,7 +40,7 @@ void PocketDB::CloseNamespaces() {
     db->CloseNamespace("BlockingView");
     db->CloseNamespace("Blocking");
     db->CloseNamespace("Reposts");
-    db->CloseNamespace("UTXO");
+    //db->CloseNamespace("UTXO"); //TODO: prunetest
     db->CloseNamespace("Addresses");
     db->CloseNamespace("Comments");
     db->CloseNamespace("Comment");
@@ -330,7 +330,8 @@ bool PocketDB::InitDB(std::string table)
         db->AddIndex("Complains", {"reason", "-", "int", IndexOpts()});
         db->Commit("Complains");
     }
-
+/*
+//TODO: prunetest
     // UTXO
     if (table == "UTXO" || table == "ALL") {
         db->OpenNamespace("UTXO", StorageOpts().Enabled().CreateIfMissing());
@@ -344,7 +345,9 @@ bool PocketDB::InitDB(std::string table)
         db->AddIndex("UTXO", {"txid+txout", {"txid", "txout"}, "hash", "composite", IndexOpts().PK()});
         db->Commit("UTXO");
     }
-
+*/
+    /*
+//TODO: prunetest
     // Addresses
     if (table == "Addresses" || table == "ALL") {
         db->OpenNamespace("Addresses", StorageOpts().Enabled().CreateIfMissing());
@@ -354,7 +357,7 @@ bool PocketDB::InitDB(std::string table)
         db->AddIndex("Addresses", {"time", "tree", "int64", IndexOpts()});
         db->Commit("Addresses");
     }
-
+*/
     // Comment
     if (table == "Comment" || table == "ALL") {
         db->OpenNamespace("Comment", StorageOpts().Enabled().CreateIfMissing());
@@ -465,7 +468,8 @@ void PocketDB::UpdateIndexes(std::string table) {
     //     db->UpdateIndex("Scores", {"address", "hash", "string", IndexOpts()});
     //     db->Commit("Scores");
     // }
-
+/*
+//TODO: prunetest
     if (table == "UTXO" || table == "ALL") {
         db->UpdateIndex("UTXO", {"block", "tree", "int", IndexOpts()});
         db->UpdateIndex("UTXO", {"address", "hash", "string", IndexOpts()});
@@ -473,7 +477,7 @@ void PocketDB::UpdateIndexes(std::string table) {
         db->UpdateIndex("UTXO", {"txid+txout", {"txid", "txout"}, "hash", "composite", IndexOpts().PK()});
         db->Commit("UTXO");
     }
-
+*/
     // if (table == "CommentRatings" || table == "ALL") {
     //     db->UpdateIndex("CommentRatings", {"block", "tree", "int", IndexOpts()});
     //     db->UpdateIndex("CommentRatings", {"commentid", "hash", "string", IndexOpts()});
@@ -924,7 +928,8 @@ Error PocketDB::RestoreLastItem(std::string table, std::string txid, std::string
 
 }
 
-
+/*
+//TODO: prunetest
 int64_t PocketDB::GetUserBalance(std::string _address, int height)
 {
     AggregationResult aggRes;
@@ -942,6 +947,7 @@ int64_t PocketDB::GetUserBalance(std::string _address, int height)
         return 0;
     }
 }
+*/
 
 int PocketDB::GetUserReputation(std::string _address, int height)
 {

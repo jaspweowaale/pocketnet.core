@@ -1286,7 +1286,8 @@ void AntiBot::CheckTransactionRIItem(UniValue oitm, BlockVTX& blockVtx, bool che
         resultCode = ANTIBOTRESULT::Unknown;
     }
 }
-
+/*
+//TODO: prunetest
 bool AntiBot::CheckInputs(CTransactionRef& tx) {
     for (auto& in : tx->vin) {
         if (!g_pocketdb->Exists(
@@ -1301,6 +1302,7 @@ bool AntiBot::CheckInputs(CTransactionRef& tx) {
 
     return true;
 }
+*/
 
 bool AntiBot::CheckBlock(BlockVTX& blockVtx, int height) {
     for (auto& t : blockVtx.Data) {

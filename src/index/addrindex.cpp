@@ -75,7 +75,8 @@ bool AddrIndex::insert_to_mempool(reindexer::Item& item, std::string table)
 
     return WriteMemRTransaction(memItm);
 }
-
+/*
+//TODO: prunetest
 bool AddrIndex::indexUTXO(const CTransactionRef& tx, CBlockIndex* pindex)
 {
     std::string txid = tx->GetHash().GetHex();
@@ -121,6 +122,7 @@ bool AddrIndex::indexUTXO(const CTransactionRef& tx, CBlockIndex* pindex)
 
     return true;
 }
+*/
 
 bool AddrIndex::indexAddress(const CTransactionRef& tx, CBlockIndex* pindex)
 {
