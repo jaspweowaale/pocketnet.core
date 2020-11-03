@@ -3940,36 +3940,37 @@ bool CheckBlockRatingRewards(const CBlock& block, CBlockIndex* pindexPrev, const
 	CAmount rewardsTotal = 0;
 
     std::vector<opcodetype> winner_types;
-	if (GetRatingRewards(calculated, txns, rewardsTotal, pindexPrev, hashProofOfStakeSource, winner_types, &block)) {
-		std::vector<CTxOut> vouts = block.vtx[1]->vout;
-		std::reverse(vouts.begin(), vouts.end());
-		const auto txnsCount = txns.size();
-		if (vouts.size() < txnsCount) {
-			return false;
-		}
-		vouts.resize(txnsCount);
-		std::reverse(vouts.begin(), vouts.end());
+    //TODO: prunetest
+	// if (GetRatingRewards(calculated, txns, rewardsTotal, pindexPrev, hashProofOfStakeSource, winner_types, &block)) {
+	// 	std::vector<CTxOut> vouts = block.vtx[1]->vout;
+	// 	std::reverse(vouts.begin(), vouts.end());
+	// 	const auto txnsCount = txns.size();
+	// 	if (vouts.size() < txnsCount) {
+	// 		return false;
+	// 	}
+	// 	vouts.resize(txnsCount);
+	// 	std::reverse(vouts.begin(), vouts.end());
 
-		auto valid = true;
+	// 	auto valid = true;
 
-		for (int i = 0; i < (int)vouts.size(); i++) {
-			auto vout = vouts[i];
-			auto txnRef = txns[i];
+	// 	for (int i = 0; i < (int)vouts.size(); i++) {
+	// 		auto vout = vouts[i];
+	// 		auto txnRef = txns[i];
 
-			valid = valid && (vout == txnRef);
+	// 		valid = valid && (vout == txnRef);
 
-			if (!valid) {
-				LogPrintf("%s\n", vout.ToString().c_str());
-				LogPrintf("%s\n", txnRef.ToString().c_str());
-				LogPrintf("NOT VALID\n");
-			}
-		}
+	// 		if (!valid) {
+	// 			LogPrintf("%s\n", vout.ToString().c_str());
+	// 			LogPrintf("%s\n", txnRef.ToString().c_str());
+	// 			LogPrintf("NOT VALID\n");
+	// 		}
+	// 	}
 
-		return valid;
-	}
-	else {
+	// 	return valid;
+	// }
+	// else {
 		return true;
-	}
+	// }
 }
 
 bool IsWitnessEnabled(const CBlockIndex* pindexPrev, const Consensus::Params& params)

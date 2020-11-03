@@ -1221,6 +1221,8 @@ void AntiBot::CheckTransactionRIItem(UniValue oitm, int height, ANTIBOTRESULT& r
 }
 
 void AntiBot::CheckTransactionRIItem(UniValue oitm, BlockVTX& blockVtx, bool checkMempool, int height, ANTIBOTRESULT& resultCode) {
+    //TODO: prunetest
+    return;
     resultCode = ANTIBOTRESULT::Success;
     std::string table = oitm["table"].get_str();
     std::string tx_type = oitm["type"].get_str();
@@ -1286,9 +1288,10 @@ void AntiBot::CheckTransactionRIItem(UniValue oitm, BlockVTX& blockVtx, bool che
         resultCode = ANTIBOTRESULT::Unknown;
     }
 }
-/*
-//TODO: prunetest
+
 bool AntiBot::CheckInputs(CTransactionRef& tx) {
+    //TODO: prunetest
+    return true;
     for (auto& in : tx->vin) {
         if (!g_pocketdb->Exists(
                 reindexer::Query("UTXO")
@@ -1302,9 +1305,10 @@ bool AntiBot::CheckInputs(CTransactionRef& tx) {
 
     return true;
 }
-*/
 
 bool AntiBot::CheckBlock(BlockVTX& blockVtx, int height) {
+    //TODO: prunetest
+    return true;
     for (auto& t : blockVtx.Data) {
         for (auto& mtx : t.second) {
             ANTIBOTRESULT resultCode = ANTIBOTRESULT::Success;
