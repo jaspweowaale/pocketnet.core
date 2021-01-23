@@ -292,7 +292,6 @@ static void http_request_cb(struct evhttp_request* req, void* arg)
         
         std::string post("/post/");
         if (strURI == post) {
-            LogPrintf("--- SEND Transaction\n");
             assert(workQueuePost);
             if (workQueuePost->Enqueue(item.get()))
                 item.release();
